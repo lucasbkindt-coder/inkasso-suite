@@ -1,0 +1,23 @@
+{
+  "name": "inkasso-suite",
+  "version": "0.0.0",
+  "private": true,
+  "packageManager": "pnpm@10.13.1",
+  "scripts": {
+    "build": "pnpm --recursive run build",
+    "dev": "pnpm --parallel --filter @inkasso/web --filter @inkasso/api run dev",
+    "db:generate": "pnpm --filter @inkasso/database run generate",
+    "db:migrate": "pnpm --filter @inkasso/database run migrate",
+    "db:seed": "pnpm --filter @inkasso/database run seed",
+    "db:studio": "pnpm --filter @inkasso/database run studio",
+    "infra:down": "docker compose down",
+    "infra:up": "docker compose up -d",
+    "lint": "biome check .",
+    "format": "biome format --write .",
+    "typecheck": "pnpm --recursive run typecheck"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.1.3",
+    "typescript": "^5.8.3"
+  }
+}

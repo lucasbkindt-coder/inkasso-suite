@@ -1,0 +1,174 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum MembershipStatus {
+  INVITED
+  ACTIVE
+  SUSPENDED
+  REMOVED
+}
+
+enum RoleKind {
+  SYSTEM
+  CUSTOM
+}
+
+enum PermissionScope {
+  TENANT
+  TEAM
+  OWN
+}
+
+model User {
+  id          String    @id @default(uuid()) @db.Uuid
+  email       String    @unique
+  displayName String?
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+
+  memberships TenantMembership[]
+
+  @@index([deletedAt])
+}
+
+model Tenant {
+  id        String    @id @default(uuid()) @db.Uuid
+  name      String
+  slug      String    @unique
+  isActive  Boolean   @default(true)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  memberships TenantMembership[]
+  teams       Team[]
+  roles       Role[]
+
+  @@index([deletedAt])
+}
+
+model TenantMembership {
+  id        String           @id @default(uuid()) @db.Uuid
+  tenantId  String           @db.Uuid
+  userId    String           @db.Uuid
+  status    MembershipStatus @default(INVITED)
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+  deletedAt DateTime?
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  teamMemberships TeamMembership[]
+  roleAssignments MembershipRole[]
+
+  @@unique([tenantId, userId])
+  @@index([userId, deletedAt])
+  @@index([tenantId, status, deletedAt])
+}
+
+model Team {
+  id        String    @id @default(uuid()) @db.Uuid
+  tenantId  String    @db.Uuid
+  name      String
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  tenant  Tenant           @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  members TeamMembership[]
+
+  @@unique([tenantId, name])
+  @@index([tenantId, deletedAt])
+}
+
+model TeamMembership {
+  id           String   @id @default(uuid()) @db.Uuid
+  teamId       String   @db.Uuid
+  membershipId String   @db.Uuid
+  createdAt    DateTime @default(now())
+
+  team       Team             @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  membership TenantMembership @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+  roles      TeamMembershipRole[]
+
+  @@unique([teamId, membershipId])
+  @@index([membershipId])
+}
+
+model Role {
+  id          String   @id @default(uuid()) @db.Uuid
+  tenantId    String   @db.Uuid
+  name        String
+  description String?
+  kind        RoleKind @default(CUSTOM)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  deletedAt   DateTime?
+
+  tenant                    Tenant               @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  permissions               RolePermission[]
+  membershipAssignments     MembershipRole[]
+  teamMembershipAssignments TeamMembershipRole[]
+
+  @@unique([tenantId, name])
+  @@index([tenantId, kind, deletedAt])
+}
+
+model Permission {
+  id          String          @id @default(uuid()) @db.Uuid
+  resource    String
+  action      String
+  scope       PermissionScope @default(TENANT)
+  description String?
+  createdAt   DateTime        @default(now())
+
+  roles RolePermission[]
+
+  @@unique([resource, action, scope])
+  @@index([resource, action])
+}
+
+model RolePermission {
+  roleId       String   @db.Uuid
+  permissionId String   @db.Uuid
+  createdAt    DateTime @default(now())
+
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@index([permissionId])
+}
+
+model MembershipRole {
+  membershipId String   @db.Uuid
+  roleId       String   @db.Uuid
+  createdAt    DateTime @default(now())
+
+  membership TenantMembership @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+  role       Role             @relation(fields: [roleId], references: [id], onDelete: Restrict)
+
+  @@id([membershipId, roleId])
+  @@index([roleId])
+}
+
+model TeamMembershipRole {
+  teamMembershipId String   @db.Uuid
+  roleId           String   @db.Uuid
+  createdAt        DateTime @default(now())
+
+  teamMembership TeamMembership @relation(fields: [teamMembershipId], references: [id], onDelete: Cascade)
+  role           Role           @relation(fields: [roleId], references: [id], onDelete: Restrict)
+
+  @@id([teamMembershipId, roleId])
+  @@index([roleId])
+}

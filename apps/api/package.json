@@ -1,0 +1,31 @@
+{
+  "name": "@inkasso/api",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "build": "nest build",
+    "dev": "dotenv -e ../../.env -- nest start --watch",
+    "lint": "biome check .",
+    "start": "dotenv -e ../../.env -- nest start",
+    "start:prod": "node dist/main.js",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@nestjs/common": "^11.1.6",
+    "@nestjs/core": "^11.1.6",
+    "@nestjs/platform-express": "^11.1.6",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.2"
+  },
+  "devDependencies": {
+    "@inkasso/config": "workspace:*",
+    "@inkasso/shared": "workspace:*",
+    "@inkasso/types": "workspace:*",
+    "@nestjs/cli": "^11.0.10",
+    "@nestjs/schematics": "^11.0.7",
+    "@nestjs/testing": "^11.1.6",
+    "@types/node": "^22.15.3",
+    "dotenv-cli": "^8.0.0",
+    "typescript": "^5.8.3"
+  }
+}
