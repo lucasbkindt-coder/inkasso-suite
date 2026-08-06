@@ -1,10 +1,5 @@
-import { PagePlaceholder } from "@/components/page-placeholder";
+import { DebtorsClient } from "@/components/debtors/debtors-client";
 
 export default function DebtorsPage() {
-  return (
-    <PagePlaceholder
-      description="Verwalten Sie künftig Schuldnerdaten und zugehörige Kontakte."
-      title="Schuldner"
-    />
-  );
+  return <DebtorsClient />;
 }

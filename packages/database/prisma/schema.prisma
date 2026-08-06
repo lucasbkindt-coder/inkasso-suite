@@ -25,6 +25,11 @@ enum PermissionScope {
   OWN
 }
 
+enum DebtorType {
+  PERSON
+  COMPANY
+}
+
 model User {
   id          String    @id @default(uuid()) @db.Uuid
   email       String    @unique
@@ -51,8 +56,35 @@ model Tenant {
   memberships TenantMembership[]
   teams       Team[]
   roles       Role[]
+  debtors     Debtor[]
 
   @@index([deletedAt])
+}
+
+model Debtor {
+  id          String     @id @default(uuid()) @db.Uuid
+  tenantId    String     @db.Uuid
+  type        DebtorType @default(PERSON)
+  firstName   String?
+  lastName    String?
+  companyName String?
+  email       String?
+  phone       String?
+  street      String?
+  postalCode  String?
+  city        String?
+  country     String     @default("DE") @db.Char(2)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  deletedAt   DateTime?
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId, deletedAt, createdAt])
+  @@index([tenantId, type, deletedAt])
+  @@index([tenantId, email])
+  @@index([lastName, firstName])
+  @@index([companyName])
 }
 
 model TenantMembership {
@@ -96,8 +128,8 @@ model TeamMembership {
   membershipId String   @db.Uuid
   createdAt    DateTime @default(now())
 
-  team       Team             @relation(fields: [teamId], references: [id], onDelete: Cascade)
-  membership TenantMembership @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+  team       Team                 @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  membership TenantMembership     @relation(fields: [membershipId], references: [id], onDelete: Cascade)
   roles      TeamMembershipRole[]
 
   @@unique([teamId, membershipId])
@@ -105,13 +137,13 @@ model TeamMembership {
 }
 
 model Role {
-  id          String   @id @default(uuid()) @db.Uuid
-  tenantId    String   @db.Uuid
+  id          String    @id @default(uuid()) @db.Uuid
+  tenantId    String    @db.Uuid
   name        String
   description String?
-  kind        RoleKind @default(CUSTOM)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  kind        RoleKind  @default(CUSTOM)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
   deletedAt   DateTime?
 
   tenant                    Tenant               @relation(fields: [tenantId], references: [id], onDelete: Restrict)
