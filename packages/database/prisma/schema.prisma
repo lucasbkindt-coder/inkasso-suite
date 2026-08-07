@@ -115,6 +115,19 @@ enum LedgerEntryStatus {
   REVERSED
 }
 
+enum LegalReferenceSyncStatus {
+  RUNNING
+  SUCCEEDED
+  FAILED
+  SUCCEEDED_WITH_CONFLICTS
+}
+
+enum RvgFeeScheduleStatus {
+  PENDING_REVIEW
+  ACTIVE
+  REJECTED
+}
+
 model User {
   id          String    @id @default(uuid()) @db.Uuid
   email       String    @unique
@@ -127,6 +140,68 @@ model User {
   memberships TenantMembership[]
 
   @@index([deletedAt])
+}
+
+model BaseInterestRatePeriod {
+  id                String    @id @default(uuid()) @db.Uuid
+  validFrom         DateTime  @unique @db.Date
+  validTo           DateTime? @db.Date
+  rate              Decimal   @db.Decimal(7, 4)
+  source            String
+  sourceReference   String
+  sourcePublishedAt DateTime?
+  fetchedAt         DateTime
+  sourceHash        String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@index([validFrom, validTo])
+}
+
+model LegalReferenceSyncRun {
+  id              String                   @id @default(uuid()) @db.Uuid
+  sourceType      String
+  startedAt       DateTime                 @default(now())
+  finishedAt      DateTime?
+  status          LegalReferenceSyncStatus @default(RUNNING)
+  fetchedRecords  Int                      @default(0)
+  insertedRecords Int                      @default(0)
+  conflictRecords Int                      @default(0)
+  errorMessage    String?
+}
+
+model RvgFeeScheduleVersion {
+  id                      String               @id @default(uuid()) @db.Uuid
+  identifier              String
+  validFrom               DateTime             @db.Date
+  validTo                 DateTime?            @db.Date
+  legalReference          String
+  sourceReference         String
+  fetchedAt               DateTime
+  sourceHash              String
+  status                  RvgFeeScheduleStatus @default(PENDING_REVIEW)
+  aboveMaximumIncrement   Decimal              @db.Decimal(15, 2)
+  aboveMaximumFeeIncrease Decimal              @db.Decimal(15, 2)
+  smallClaimCollectionFee Decimal?             @db.Decimal(15, 2)
+  createdAt               DateTime             @default(now())
+  updatedAt               DateTime             @updatedAt
+
+  thresholds RvgFeeThreshold[]
+
+  @@unique([identifier, validFrom])
+  @@index([status, validFrom])
+}
+
+model RvgFeeThreshold {
+  id                String  @id @default(uuid()) @db.Uuid
+  scheduleVersionId String  @db.Uuid
+  valueUpTo         Decimal @db.Decimal(15, 2)
+  baseFee           Decimal @db.Decimal(15, 2)
+
+  scheduleVersion RvgFeeScheduleVersion @relation(fields: [scheduleVersionId], references: [id], onDelete: Cascade)
+
+  @@unique([scheduleVersionId, valueUpTo])
+  @@index([scheduleVersionId, valueUpTo])
 }
 
 model Tenant {

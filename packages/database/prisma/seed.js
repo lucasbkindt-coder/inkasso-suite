@@ -14,7 +14,53 @@ const {
   PermissionScope,
   PrismaClient,
   RoleKind,
+  RvgFeeScheduleStatus,
 } = require("@prisma/client");
+
+const rvg2025Tiers = [
+  [500, "51.50"],
+  [1000, "93.00"],
+  [1500, "134.50"],
+  [2000, "176.00"],
+  [3000, "235.50"],
+  [4000, "295.00"],
+  [5000, "354.50"],
+  [6000, "414.00"],
+  [7000, "473.50"],
+  [8000, "533.00"],
+  [9000, "592.50"],
+  [10000, "652.00"],
+  [13000, "707.00"],
+  [16000, "762.00"],
+  [19000, "817.00"],
+  [22000, "872.00"],
+  [25000, "927.00"],
+  [30000, "1013.00"],
+  [35000, "1099.00"],
+  [40000, "1185.00"],
+  [45000, "1271.00"],
+  [50000, "1357.00"],
+  [65000, "1456.50"],
+  [80000, "1556.00"],
+  [95000, "1655.50"],
+  [110000, "1755.00"],
+  [125000, "1854.50"],
+  [140000, "1954.00"],
+  [155000, "2053.50"],
+  [170000, "2153.00"],
+  [185000, "2252.50"],
+  [200000, "2352.00"],
+  [230000, "2492.00"],
+  [260000, "2632.00"],
+  [290000, "2772.00"],
+  [320000, "2912.00"],
+  [350000, "3052.00"],
+  [380000, "3192.00"],
+  [410000, "3332.00"],
+  [440000, "3472.00"],
+  [470000, "3612.00"],
+  [500000, "3752.00"],
+];
 
 const prisma = new PrismaClient();
 
@@ -128,6 +174,39 @@ async function main() {
 
   await seedPartyMasterData(tenant.id);
   await seedCase(tenant.id);
+  await seedRvgReferenceData();
+}
+
+async function seedRvgReferenceData() {
+  const schedule = await prisma.rvgFeeScheduleVersion.upsert({
+    where: {
+      identifier_validFrom: {
+        identifier: "rvg-para-13-anlage-2",
+        validFrom: new Date("2025-01-01"),
+      },
+    },
+    update: {},
+    create: {
+      identifier: "rvg-para-13-anlage-2",
+      validFrom: new Date("2025-01-01"),
+      legalReference: "§ 13 RVG i. V. m. Anlage 2; § 13 Abs. 2 RVG",
+      sourceReference: "https://www.gesetze-im-internet.de/rvg/anlage_2.html",
+      fetchedAt: new Date(),
+      sourceHash: "rvg-2025-initial",
+      status: RvgFeeScheduleStatus.ACTIVE,
+      aboveMaximumIncrement: "50000.00",
+      aboveMaximumFeeIncrease: "175.00",
+      smallClaimCollectionFee: "31.50",
+    },
+  });
+  await prisma.rvgFeeThreshold.createMany({
+    data: rvg2025Tiers.map(([valueUpTo, baseFee]) => ({
+      scheduleVersionId: schedule.id,
+      valueUpTo,
+      baseFee,
+    })),
+    skipDuplicates: true,
+  });
 }
 
 async function seedCase(tenantId) {
