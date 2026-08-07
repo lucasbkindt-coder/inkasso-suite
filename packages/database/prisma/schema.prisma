@@ -30,6 +30,35 @@ enum DebtorType {
   COMPANY
 }
 
+enum PartyType {
+  PERSON
+  COMPANY
+}
+
+enum PartyRoleType {
+  CLIENT
+  DEBTOR
+  CONTACT
+  OTHER
+}
+
+enum AddressType {
+  PRIMARY
+  DELIVERY
+  BILLING
+  PREVIOUS
+  OTHER
+}
+
+enum ContactType {
+  EMAIL
+  PHONE
+  MOBILE
+  FAX
+  WEBSITE
+  OTHER
+}
+
 model User {
   id          String    @id @default(uuid()) @db.Uuid
   email       String    @unique
@@ -57,8 +86,115 @@ model Tenant {
   teams       Team[]
   roles       Role[]
   debtors     Debtor[]
+  parties     Party[]
 
   @@index([deletedAt])
+}
+
+model Party {
+  id          String    @id @default(uuid()) @db.Uuid
+  tenantId    String    @db.Uuid
+  type        PartyType
+  displayName String
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+
+  tenant    Tenant      @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  person    Person?
+  company   Company?
+  roles     PartyRole[]
+  addresses Address[]
+  contacts  Contact[]
+
+  @@index([tenantId, deletedAt, displayName])
+  @@index([tenantId, type, deletedAt])
+}
+
+model Person {
+  id         String    @id @default(uuid()) @db.Uuid
+  partyId    String    @unique @db.Uuid
+  salutation String?
+  title      String?
+  firstName  String
+  lastName   String
+  birthDate  DateTime? @db.Date
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  party Party @relation(fields: [partyId], references: [id], onDelete: Restrict)
+
+  @@index([lastName, firstName])
+}
+
+model Company {
+  id                 String   @id @default(uuid()) @db.Uuid
+  partyId            String   @unique @db.Uuid
+  companyName        String
+  legalForm          String?
+  vatId              String?
+  taxNumber          String?
+  commercialRegister String?
+  registerNumber     String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  party Party @relation(fields: [partyId], references: [id], onDelete: Restrict)
+
+  @@index([companyName])
+  @@index([vatId])
+}
+
+model PartyRole {
+  id        String        @id @default(uuid()) @db.Uuid
+  partyId   String        @db.Uuid
+  role      PartyRoleType
+  createdAt DateTime      @default(now())
+  deletedAt DateTime?
+
+  party Party @relation(fields: [partyId], references: [id], onDelete: Restrict)
+
+  @@unique([partyId, role])
+  @@index([role, deletedAt])
+}
+
+model Address {
+  id           String      @id @default(uuid()) @db.Uuid
+  partyId      String      @db.Uuid
+  type         AddressType @default(PRIMARY)
+  street       String
+  houseNumber  String?
+  addressLine2 String?
+  postalCode   String
+  city         String
+  country      String      @default("DE") @db.Char(2)
+  isPrimary    Boolean     @default(false)
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+  deletedAt    DateTime?
+
+  party Party @relation(fields: [partyId], references: [id], onDelete: Restrict)
+
+  @@index([partyId, deletedAt, isPrimary])
+  @@index([postalCode, city])
+}
+
+model Contact {
+  id        String      @id @default(uuid()) @db.Uuid
+  partyId   String      @db.Uuid
+  type      ContactType
+  value     String
+  label     String?
+  isPrimary Boolean     @default(false)
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+  deletedAt DateTime?
+
+  party Party @relation(fields: [partyId], references: [id], onDelete: Restrict)
+
+  @@index([partyId, deletedAt, isPrimary])
+  @@index([partyId, type, deletedAt])
+  @@index([value])
 }
 
 model Debtor {
