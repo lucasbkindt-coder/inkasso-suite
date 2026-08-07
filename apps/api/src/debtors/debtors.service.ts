@@ -1,8 +1,8 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { DebtorType, type Prisma } from "@prisma/client";
 
-import type { PrismaService } from "../prisma/prisma.service";
-import type { TenantContextService } from "../tenant/tenant-context.service";
+import { PrismaService } from "../prisma/prisma.service";
+import { TenantContextService } from "../tenant/tenant-context.service";
 import type { CreateDebtorDto } from "./dto/create-debtor.dto";
 import type { QueryDebtorsDto } from "./dto/query-debtors.dto";
 import type { UpdateDebtorDto } from "./dto/update-debtor.dto";

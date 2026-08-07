@@ -16,6 +16,7 @@ export const navigationGroups = [
     items: [
       { href: "/", label: "Dashboard", icon: LayoutDashboard },
       { href: "/schuldner", label: "Schuldner", icon: Users },
+      { href: "/parteien", label: "Parteien", icon: UsersRound },
       { href: "/forderungen", label: "Forderungen", icon: BadgeEuro },
       { href: "/zahlungen", label: "Zahlungen", icon: WalletCards },
       { href: "/dokumente", label: "Dokumente", icon: Files },
@@ -36,6 +37,7 @@ export const navigationGroups = [
 export const pageTitles: Record<string, string> = {
   "/": "Dashboard",
   "/schuldner": "Schuldner",
+  "/parteien": "Parteien",
   "/mandanten": "Mandanten",
   "/forderungen": "Forderungen",
   "/zahlungen": "Zahlungen",

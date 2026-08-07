@@ -1,8 +1,8 @@
 import { Module } from "@nestjs/common";
 
+import { CoreModule } from "./core/core.module";
 import { DebtorsModule } from "./debtors/debtors.module";
-import { PrismaService } from "./prisma/prisma.service";
-import { TenantContextService } from "./tenant/tenant-context.service";
+import { PartiesModule } from "./parties/parties.module";
 
-@Module({ imports: [DebtorsModule], providers: [PrismaService, TenantContextService] })
+@Module({ imports: [CoreModule, DebtorsModule, PartiesModule] })
 export class AppModule {}

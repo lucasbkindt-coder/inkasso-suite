@@ -10,10 +10,10 @@ import {
   Post,
   Query,
 } from "@nestjs/common";
-import type { DebtorsService } from "./debtors.service";
-import type { CreateDebtorDto } from "./dto/create-debtor.dto";
-import type { QueryDebtorsDto } from "./dto/query-debtors.dto";
-import type { UpdateDebtorDto } from "./dto/update-debtor.dto";
+import { DebtorsService } from "./debtors.service";
+import { CreateDebtorDto } from "./dto/create-debtor.dto";
+import { QueryDebtorsDto } from "./dto/query-debtors.dto";
+import { UpdateDebtorDto } from "./dto/update-debtor.dto";
 
 @Controller("debtors")
 export class DebtorsController {
