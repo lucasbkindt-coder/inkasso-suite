@@ -306,7 +306,7 @@ export class CostsService {
   }
 
   private async lockCalculation(tx: Prisma.TransactionClient, caseId: string, fingerprint: string) {
-    await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${`cost:${caseId}:${fingerprint}`}))`;
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`cost:${caseId}:${fingerprint}`}))`;
   }
 
   private fingerprint(value: unknown) {

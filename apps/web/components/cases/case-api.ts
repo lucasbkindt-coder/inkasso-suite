@@ -53,6 +53,35 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return (response.status === 204 ? undefined : response.json()) as T;
 }
 
+function isLedgerResponse(value: unknown): value is LedgerResponse {
+  if (typeof value !== "object" || value === null || !("items" in value) || !("totals" in value))
+    return false;
+  const totals = value.totals;
+  if (typeof totals !== "object" || totals === null) return false;
+  const requiredTotals = [
+    "totalDebit",
+    "totalCredit",
+    "balance",
+    "openCosts",
+    "openInterest",
+    "openPrincipal",
+    "totalOpen",
+    "unallocatedPayments",
+  ];
+  return requiredTotals.every(
+    (key) => key in totals && typeof totals[key as keyof typeof totals] === "string",
+  );
+}
+
+async function getLedger(caseId: string) {
+  const response = await request<unknown>(`/cases/${caseId}/ledger`);
+  if (!isLedgerResponse(response))
+    throw new Error(
+      "Die API liefert eine veraltete Forderungskonto-Antwort. Bitte die RisePay-API neu starten.",
+    );
+  return response;
+}
+
 function queryString(query: Record<string, string | number | boolean | undefined>) {
   const params = new URLSearchParams();
   for (const [key, value] of Object.entries(query)) {
@@ -77,7 +106,7 @@ export const caseApi = {
   restoreCase: (id: string) => request<Case>(`/cases/${id}/restore`, { method: "POST" }),
   getParties: (role: "CLIENT" | "DEBTOR", search?: string) =>
     request<PartiesResponse>(`/parties?${queryString({ role, search, limit: 100 })}`),
-  getLedger: (caseId: string) => request<LedgerResponse>(`/cases/${caseId}/ledger`),
+  getLedger,
   getPayments: (caseId: string) =>
     request<{ items: PaymentApplyResponse["payment"][] }>(`/cases/${caseId}/payments`),
   createLedgerEntry: (caseId: string, payload: CreateLedgerEntryInput) =>
