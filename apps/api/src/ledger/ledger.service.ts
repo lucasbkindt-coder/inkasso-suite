@@ -4,7 +4,13 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import { LedgerEntrySide, LedgerEntryStatus, LedgerEntryType, Prisma } from "@prisma/client";
+import {
+  CaseCostCalculationStatus,
+  LedgerEntrySide,
+  LedgerEntryStatus,
+  LedgerEntryType,
+  Prisma,
+} from "@prisma/client";
 
 import { PrismaService } from "../prisma/prisma.service";
 import { TenantContextService } from "../tenant/tenant-context.service";
@@ -91,7 +97,7 @@ export class LedgerService {
         where: { id: entry.id },
         data: { status: LedgerEntryStatus.REVERSED },
       });
-      return tx.caseLedgerEntry.create({
+      const reversal = await tx.caseLedgerEntry.create({
         data: {
           tenantId,
           caseId,
@@ -109,6 +115,18 @@ export class LedgerService {
           createdByMembershipId: entry.createdByMembershipId,
         },
       });
+      if (entry.costCalculationId) {
+        const activeEntries = await tx.caseLedgerEntry.count({
+          where: { costCalculationId: entry.costCalculationId, status: LedgerEntryStatus.ACTIVE },
+        });
+        if (activeEntries === 0) {
+          await tx.caseCostCalculation.updateMany({
+            where: { id: entry.costCalculationId, status: CaseCostCalculationStatus.APPLIED },
+            data: { status: CaseCostCalculationStatus.REVERSED, reversedAt: new Date() },
+          });
+        }
+      }
+      return reversal;
     });
   }
 

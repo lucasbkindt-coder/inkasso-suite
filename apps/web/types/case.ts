@@ -159,3 +159,35 @@ export type CreateLedgerEntryInput = {
   valueDate?: string;
   description: string;
 };
+
+export type RvgScenario =
+  | "SIMPLE_LETTER"
+  | "SIMPLE_CASE"
+  | "REGULAR_UNCONTESTED"
+  | "EXTENSIVE_OR_DIFFICULT";
+export type InterestMode = "CONSUMER_DEFAULT" | "COMMERCIAL_DEFAULT" | "CUSTOM";
+export type RvgCostInput = {
+  calculationDate: string;
+  scenario?: RvgScenario;
+  customFactor?: string;
+  includeExpenseAllowance?: boolean;
+  includeVat?: boolean;
+  vatRate?: string;
+};
+export type InterestCostInput = {
+  fromDate?: string;
+  toDate?: string;
+  mode: InterestMode;
+  fixedAnnualRate?: string;
+  baseRateMargin?: string;
+};
+export type CostPreview = {
+  totalInterest?: string;
+  grossTotal?: string;
+  feeNet?: string;
+  expenseAllowance?: string;
+  vatAmount?: string;
+  calculationFrom?: string;
+  calculationTo?: string;
+  periods?: { from: string; to: string; days: number; interestAmount: string }[];
+};

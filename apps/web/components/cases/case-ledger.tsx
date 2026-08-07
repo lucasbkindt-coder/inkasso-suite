@@ -13,6 +13,7 @@ import type {
 } from "@/types/case";
 
 import { caseApi } from "./case-api";
+import { CaseCostActions } from "./case-cost-dialogs";
 import { formatCurrency, formatDate } from "./case-ui";
 
 const typeLabels: Record<Exclude<LedgerEntryType, "PRINCIPAL">, string> = {
@@ -62,9 +63,12 @@ export function CaseLedger({ caseId }: { caseId: string }) {
             Wirksame Buchungen und Saldo der Inkassoakte.
           </p>
         </div>
-        <Button onClick={() => setOpen(true)}>
-          <Plus className="size-4" /> Buchung erfassen
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <CaseCostActions caseId={caseId} onApplied={load} />
+          <Button onClick={() => setOpen(true)}>
+            <Plus className="size-4" /> Buchung erfassen
+          </Button>
+        </div>
       </div>
       <LedgerDialog caseId={caseId} onOpenChange={setOpen} onSaved={load} open={open} />
       {error ? <p className="mt-4 text-sm text-destructive">{error}</p> : null}

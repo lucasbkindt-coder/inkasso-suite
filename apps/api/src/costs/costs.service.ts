@@ -1,8 +1,24 @@
-import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
-import { Prisma, RvgFeeScheduleStatus } from "@prisma/client";
+import { createHash } from "node:crypto";
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
+import {
+  CaseCostCalculationStatus,
+  CaseCostCalculationType,
+  LedgerEntrySide,
+  LedgerEntryType,
+  Prisma,
+  RvgFeeScheduleStatus,
+} from "@prisma/client";
 import { LegalReferenceSyncService } from "../legal-references/legal-reference-sync.service";
 import { PrismaService } from "../prisma/prisma.service";
+import { TenantContextService } from "../tenant/tenant-context.service";
 import {
+  CaseInterestCostDto,
+  CaseRvgCostDto,
   InterestMode,
   type InterestPreviewDto,
   RvgPreviewDto,
@@ -20,13 +36,17 @@ export class CostsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly legal: LegalReferenceSyncService,
+    private readonly tenantContext: TenantContextService,
   ) {}
   async rvgPreview(dto: RvgPreviewDto) {
     const date = new Date(dto.calculationDate),
       value = new Prisma.Decimal(dto.subjectValue);
     const s = await this.prisma.rvgFeeScheduleVersion.findFirst({
       where: {
-        status: RvgFeeScheduleStatus.ACTIVE,
+        // A superseded, reviewed schedule is retained as REJECTED by the
+        // legal-reference workflow. It remains the authoritative local source
+        // for calculations whose date falls within its validity period.
+        status: { in: [RvgFeeScheduleStatus.ACTIVE, RvgFeeScheduleStatus.REJECTED] },
         validFrom: { lte: date },
         OR: [{ validTo: null }, { validTo: { gte: date } }],
       },
@@ -120,5 +140,155 @@ export class CostsService {
       dayConvention: "actual/365",
       periods: result,
     };
+  }
+
+  async caseRvgPreview(caseId: string, dto: CaseRvgCostDto) {
+    const claim = await this.getCaseClaim(caseId);
+    return this.rvgPreview({
+      ...dto,
+      subjectValue: claim.principalAmount.toFixed(2),
+      calculationDate: dto.calculationDate,
+    });
+  }
+
+  async applyCaseRvg(caseId: string, dto: CaseRvgCostDto) {
+    const claim = await this.getCaseClaim(caseId);
+    const preview = await this.caseRvgPreview(caseId, dto);
+    const tenantId = await this.tenantContext.getTenantId();
+    const fingerprint = this.fingerprint({ type: "RVG", caseId, claimId: claim.id, preview });
+    return this.prisma.$transaction(async (tx) => {
+      await this.lockCalculation(tx, caseId, fingerprint);
+      await this.assertNoActiveCalculation(tx, tenantId, caseId, fingerprint);
+      const calculation = await tx.caseCostCalculation.create({
+        data: {
+          tenantId,
+          caseId,
+          type: CaseCostCalculationType.RVG,
+          fingerprint,
+          calculatedAmount: new Prisma.Decimal(preview.feeNet).plus(preview.expenseAllowance),
+          referenceData: { claimId: claim.id, currency: claim.currency, preview },
+        },
+      });
+      const bookingDate = new Date(dto.calculationDate);
+      const entries = await Promise.all(
+        [
+          {
+            type: LedgerEntryType.COLLECTION_FEE,
+            amount: preview.feeNet,
+            description: `RVG-Inkassogebühr (${preview.feeReference})`,
+          },
+          ...(new Prisma.Decimal(preview.expenseAllowance).gt(0)
+            ? [
+                {
+                  type: LedgerEntryType.EXPENSE,
+                  amount: preview.expenseAllowance,
+                  description: "Auslagenpauschale nach VV RVG",
+                },
+              ]
+            : []),
+        ].map((entry) =>
+          tx.caseLedgerEntry.create({
+            data: {
+              tenantId,
+              caseId,
+              costCalculationId: calculation.id,
+              side: LedgerEntrySide.DEBIT,
+              type: entry.type,
+              amount: entry.amount,
+              currency: claim.currency,
+              bookingDate,
+              description: entry.description,
+              externalReference: `rvg:${fingerprint}`,
+              source: "rvg-calculation",
+            },
+          }),
+        ),
+      );
+      return { calculation, ledgerEntries: entries, preview };
+    });
+  }
+
+  async caseInterestPreview(caseId: string, dto: CaseInterestCostDto) {
+    const claim = await this.getCaseClaim(caseId);
+    const fromDate = dto.fromDate ?? this.dateOnly(claim.defaultDate ?? claim.dueDate);
+    return this.interestPreview({
+      ...dto,
+      principalAmount: claim.principalAmount.toFixed(2),
+      fromDate,
+      toDate: dto.toDate ?? this.dateOnly(new Date()),
+    });
+  }
+
+  async applyCaseInterest(caseId: string, dto: CaseInterestCostDto) {
+    const claim = await this.getCaseClaim(caseId);
+    const preview = await this.caseInterestPreview(caseId, dto);
+    const tenantId = await this.tenantContext.getTenantId();
+    const fingerprint = this.fingerprint({ type: "INTEREST", caseId, claimId: claim.id, preview });
+    return this.prisma.$transaction(async (tx) => {
+      await this.lockCalculation(tx, caseId, fingerprint);
+      await this.assertNoActiveCalculation(tx, tenantId, caseId, fingerprint);
+      const calculation = await tx.caseCostCalculation.create({
+        data: {
+          tenantId,
+          caseId,
+          type: CaseCostCalculationType.INTEREST,
+          fingerprint,
+          calculatedAmount: preview.totalInterest,
+          referenceData: { claimId: claim.id, currency: claim.currency, preview },
+        },
+      });
+      const entry = await tx.caseLedgerEntry.create({
+        data: {
+          tenantId,
+          caseId,
+          costCalculationId: calculation.id,
+          side: LedgerEntrySide.DEBIT,
+          type: LedgerEntryType.INTEREST,
+          amount: preview.totalInterest,
+          currency: claim.currency,
+          bookingDate: new Date(preview.calculationTo),
+          description: `Verzugszinsen ${this.dateOnly(preview.calculationFrom)} bis ${this.dateOnly(preview.calculationTo)}`,
+          externalReference: `interest:${fingerprint}`,
+          source: "interest-calculation",
+        },
+      });
+      return { calculation, ledgerEntries: [entry], preview };
+    });
+  }
+
+  private async getCaseClaim(caseId: string) {
+    const tenantId = await this.tenantContext.getTenantId();
+    const caseRecord = await this.prisma.case.findFirst({
+      where: { id: caseId, tenantId, deletedAt: null },
+      include: { claim: true },
+    });
+    if (!caseRecord) throw new NotFoundException("Akte wurde nicht gefunden.");
+    if (!caseRecord.claim) throw new BadRequestException("Die Akte enthält keine Forderung.");
+    return caseRecord.claim;
+  }
+
+  private async assertNoActiveCalculation(
+    tx: Prisma.TransactionClient,
+    tenantId: string,
+    caseId: string,
+    fingerprint: string,
+  ) {
+    const exists = await tx.caseCostCalculation.findFirst({
+      where: { tenantId, caseId, fingerprint, status: CaseCostCalculationStatus.APPLIED },
+      select: { id: true },
+    });
+    if (exists) throw new ConflictException("Diese Kostenberechnung wurde bereits übernommen.");
+  }
+
+  private async lockCalculation(tx: Prisma.TransactionClient, caseId: string, fingerprint: string) {
+    await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${`cost:${caseId}:${fingerprint}`}))`;
+  }
+
+  private fingerprint(value: unknown) {
+    return createHash("sha256").update(JSON.stringify(value)).digest("hex");
+  }
+
+  private dateOnly(value: Date) {
+    return value.toISOString().slice(0, 10);
   }
 }

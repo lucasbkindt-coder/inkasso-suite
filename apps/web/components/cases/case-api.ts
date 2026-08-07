@@ -3,8 +3,10 @@ import type {
   CasesResponse,
   CreateCaseInput,
   CreateLedgerEntryInput,
+  InterestCostInput,
   LedgerEntry,
   LedgerResponse,
+  RvgCostInput,
   UpdateCaseInput,
 } from "@/types/case";
 
@@ -81,6 +83,23 @@ export const caseApi = {
     }),
   reverseLedgerEntry: (caseId: string, entryId: string) =>
     request<LedgerEntry>(`/cases/${caseId}/ledger/${entryId}/reverse`, { method: "POST" }),
+  previewRvgCosts: (caseId: string, payload: RvgCostInput) =>
+    request(`/cases/${caseId}/costs/rvg/preview`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  applyRvgCosts: (caseId: string, payload: RvgCostInput) =>
+    request(`/cases/${caseId}/costs/rvg/apply`, { method: "POST", body: JSON.stringify(payload) }),
+  previewInterestCosts: (caseId: string, payload: InterestCostInput) =>
+    request(`/cases/${caseId}/costs/interest/preview`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  applyInterestCosts: (caseId: string, payload: InterestCostInput) =>
+    request(`/cases/${caseId}/costs/interest/apply`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
 };
 
 export type { PartyOption };

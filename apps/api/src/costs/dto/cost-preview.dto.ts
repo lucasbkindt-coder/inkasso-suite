@@ -27,3 +27,21 @@ export class InterestPreviewDto {
   @IsOptional() @IsString() fixedAnnualRate?: string;
   @IsOptional() @IsString() baseRateMargin?: string;
 }
+
+/** Input for a case calculation. Amounts and dates are resolved from the claim server-side. */
+export class CaseRvgCostDto {
+  @IsDateString() calculationDate!: string;
+  @IsOptional() @IsEnum(RvgScenario) scenario: RvgScenario = RvgScenario.REGULAR_UNCONTESTED;
+  @IsOptional() @IsString() customFactor?: string;
+  @IsOptional() @IsBoolean() includeExpenseAllowance = true;
+  @IsOptional() @IsBoolean() includeVat = false;
+  @IsOptional() @IsString() vatRate?: string;
+}
+
+export class CaseInterestCostDto {
+  @IsOptional() @IsDateString() fromDate?: string;
+  @IsOptional() @IsDateString() toDate?: string;
+  @IsEnum(InterestMode) mode!: InterestMode;
+  @IsOptional() @IsString() fixedAnnualRate?: string;
+  @IsOptional() @IsString() baseRateMargin?: string;
+}

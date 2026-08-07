@@ -128,6 +128,16 @@ enum RvgFeeScheduleStatus {
   REJECTED
 }
 
+enum CaseCostCalculationType {
+  RVG
+  INTEREST
+}
+
+enum CaseCostCalculationStatus {
+  APPLIED
+  REVERSED
+}
+
 model User {
   id          String    @id @default(uuid()) @db.Uuid
   email       String    @unique
@@ -213,43 +223,45 @@ model Tenant {
   updatedAt DateTime  @updatedAt
   deletedAt DateTime?
 
-  memberships   TenantMembership[]
-  teams         Team[]
-  roles         Role[]
-  debtors       Debtor[]
-  parties       Party[]
-  cases         Case[]
-  claims        Claim[]
-  sequences     CaseNumberSequence[]
-  ledgerEntries CaseLedgerEntry[]
+  memberships      TenantMembership[]
+  teams            Team[]
+  roles            Role[]
+  debtors          Debtor[]
+  parties          Party[]
+  cases            Case[]
+  claims           Claim[]
+  sequences        CaseNumberSequence[]
+  ledgerEntries    CaseLedgerEntry[]
+  costCalculations CaseCostCalculation[]
 
   @@index([deletedAt])
 }
 
 model Case {
-  id                String            @id @default(uuid()) @db.Uuid
-  tenantId          String            @db.Uuid
+  id                String                @id @default(uuid()) @db.Uuid
+  tenantId          String                @db.Uuid
   caseNumber        String
   sequenceYear      Int
   sequenceNumber    Int
-  clientPartyId     String            @db.Uuid
-  debtorPartyId     String            @db.Uuid
-  ownerMembershipId String?           @db.Uuid
-  status            CaseStatus        @default(OPEN)
-  phase             CasePhase         @default(NEW)
-  priority          CasePriority      @default(NORMAL)
-  openedAt          DateTime          @default(now())
+  clientPartyId     String                @db.Uuid
+  debtorPartyId     String                @db.Uuid
+  ownerMembershipId String?               @db.Uuid
+  status            CaseStatus            @default(OPEN)
+  phase             CasePhase             @default(NEW)
+  priority          CasePriority          @default(NORMAL)
+  openedAt          DateTime              @default(now())
   closedAt          DateTime?
   internalNotes     String?
-  createdAt         DateTime          @default(now())
-  updatedAt         DateTime          @updatedAt
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
   deletedAt         DateTime?
-  tenant            Tenant            @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-  clientParty       Party             @relation("CaseClient", fields: [clientPartyId], references: [id], onDelete: Restrict)
-  debtorParty       Party             @relation("CaseDebtor", fields: [debtorPartyId], references: [id], onDelete: Restrict)
-  ownerMembership   TenantMembership? @relation(fields: [ownerMembershipId], references: [id], onDelete: Restrict)
+  tenant            Tenant                @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  clientParty       Party                 @relation("CaseClient", fields: [clientPartyId], references: [id], onDelete: Restrict)
+  debtorParty       Party                 @relation("CaseDebtor", fields: [debtorPartyId], references: [id], onDelete: Restrict)
+  ownerMembership   TenantMembership?     @relation(fields: [ownerMembershipId], references: [id], onDelete: Restrict)
   claim             Claim?
   ledgerEntries     CaseLedgerEntry[]
+  costCalculations  CaseCostCalculation[]
 
   @@unique([tenantId, caseNumber])
   @@unique([tenantId, sequenceYear, sequenceNumber])
@@ -258,6 +270,26 @@ model Case {
   @@index([clientPartyId])
   @@index([debtorPartyId])
   @@index([ownerMembershipId])
+}
+
+model CaseCostCalculation {
+  id               String                    @id @default(uuid()) @db.Uuid
+  tenantId         String                    @db.Uuid
+  caseId           String                    @db.Uuid
+  type             CaseCostCalculationType
+  status           CaseCostCalculationStatus @default(APPLIED)
+  fingerprint      String
+  calculatedAmount Decimal                   @db.Decimal(15, 2)
+  referenceData    Json
+  createdAt        DateTime                  @default(now())
+  appliedAt        DateTime                  @default(now())
+  reversedAt       DateTime?
+  tenant           Tenant                    @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  case             Case                      @relation(fields: [caseId], references: [id], onDelete: Restrict)
+  ledgerEntries    CaseLedgerEntry[]
+
+  @@index([tenantId, caseId, type, status])
+  @@index([caseId, fingerprint])
 }
 
 model CaseLedgerEntry {
@@ -276,20 +308,23 @@ model CaseLedgerEntry {
   source                String?
   reversedEntryId       String?           @unique @db.Uuid
   createdByMembershipId String?           @db.Uuid
+  costCalculationId     String?           @db.Uuid
   createdAt             DateTime          @default(now())
   updatedAt             DateTime          @updatedAt
 
-  tenant              Tenant            @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-  case                Case              @relation(fields: [caseId], references: [id], onDelete: Restrict)
-  reversedEntry       CaseLedgerEntry?  @relation("LedgerReversal", fields: [reversedEntryId], references: [id], onDelete: Restrict)
-  reversal            CaseLedgerEntry?  @relation("LedgerReversal")
-  createdByMembership TenantMembership? @relation(fields: [createdByMembershipId], references: [id], onDelete: Restrict)
+  tenant              Tenant               @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  case                Case                 @relation(fields: [caseId], references: [id], onDelete: Restrict)
+  reversedEntry       CaseLedgerEntry?     @relation("LedgerReversal", fields: [reversedEntryId], references: [id], onDelete: Restrict)
+  reversal            CaseLedgerEntry?     @relation("LedgerReversal")
+  createdByMembership TenantMembership?    @relation(fields: [createdByMembershipId], references: [id], onDelete: Restrict)
+  costCalculation     CaseCostCalculation? @relation(fields: [costCalculationId], references: [id], onDelete: Restrict)
 
   @@index([tenantId, caseId, bookingDate])
   @@index([caseId, status])
   @@index([type])
   @@index([externalReference])
   @@index([createdByMembershipId])
+  @@index([costCalculationId])
 }
 
 model Claim {
