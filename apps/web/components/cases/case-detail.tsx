@@ -50,7 +50,7 @@ export function CaseDetail() {
         <div className="space-y-6">
           <CaseTabs />
           <CaseOverview caseRecord={caseRecord} />
-          <CaseDocuments />
+          <CaseDocuments caseId={caseRecord.id} />
           <CaseLedger caseId={caseRecord.id} />
         </div>
         <CaseTimeline />

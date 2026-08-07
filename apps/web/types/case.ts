@@ -199,6 +199,24 @@ export type CreateLedgerEntryInput = {
   description: string;
 };
 
+export type DocumentTemplate = {
+  id: string;
+  key: string;
+  name: string;
+  type: string;
+  version: number;
+};
+export type CaseDocument = {
+  id: string;
+  type: string;
+  status: "DRAFT" | "GENERATED" | "SENT" | "VOIDED";
+  filename: string;
+  templateVersion: number | null;
+  renderedSubject: string | null;
+  generatedAt: string;
+  template?: { name: string; key: string } | null;
+};
+
 export type RvgScenario =
   | "SIMPLE_LETTER"
   | "SIMPLE_CASE"

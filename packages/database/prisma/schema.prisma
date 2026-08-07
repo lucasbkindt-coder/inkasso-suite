@@ -125,6 +125,28 @@ enum PaymentAllocationStatus {
   REVERSED
 }
 
+enum DocumentType {
+  PAYMENT_REQUEST
+  SECOND_PAYMENT_REQUEST
+  JUDICIAL_DUNNING_NOTICE
+  ENFORCEMENT_NOTICE
+  PAYMENT_PLAN
+  CUSTOM
+}
+
+enum DocumentStatus {
+  DRAFT
+  GENERATED
+  SENT
+  VOIDED
+}
+
+enum TemplateStatus {
+  ACTIVE
+  INACTIVE
+  ARCHIVED
+}
+
 enum LegalReferenceSyncStatus {
   RUNNING
   SUCCEEDED
@@ -244,6 +266,8 @@ model Tenant {
   ledgerEntries      CaseLedgerEntry[]
   costCalculations   CaseCostCalculation[]
   paymentAllocations PaymentAllocation[]
+  documentTemplates  DocumentTemplate[]
+  documents          CaseDocument[]
 
   @@index([deletedAt])
 }
@@ -274,6 +298,7 @@ model Case {
   ledgerEntries      CaseLedgerEntry[]
   costCalculations   CaseCostCalculation[]
   paymentAllocations PaymentAllocation[]
+  documents          CaseDocument[]
 
   @@unique([tenantId, caseNumber])
   @@unique([tenantId, sequenceYear, sequenceNumber])
@@ -364,6 +389,57 @@ model PaymentAllocation {
   @@unique([paymentEntryId, allocationOrder])
   @@index([tenantId, caseId, status])
   @@index([targetEntryId, status])
+}
+
+model DocumentTemplate {
+  id           String         @id @default(uuid()) @db.Uuid
+  tenantId     String?        @db.Uuid
+  key          String
+  name         String
+  type         DocumentType
+  version      Int
+  status       TemplateStatus @default(ACTIVE)
+  subject      String?
+  bodyTemplate String
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  tenant    Tenant?        @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  documents CaseDocument[]
+
+  @@unique([tenantId, key, version])
+  @@index([tenantId, status, type])
+}
+
+model CaseDocument {
+  id                    String         @id @default(uuid()) @db.Uuid
+  tenantId              String         @db.Uuid
+  caseId                String         @db.Uuid
+  templateId            String?        @db.Uuid
+  type                  DocumentType
+  status                DocumentStatus @default(DRAFT)
+  filename              String
+  mimeType              String         @default("application/pdf")
+  storageKey            String
+  templateVersion       Int?
+  renderedSubject       String?
+  renderedBody          String
+  dataSnapshot          Json
+  generatedAt           DateTime       @default(now())
+  sentAt                DateTime?
+  voidedAt              DateTime?
+  createdByMembershipId String?        @db.Uuid
+  createdAt             DateTime       @default(now())
+  updatedAt             DateTime       @updatedAt
+
+  tenant              Tenant            @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  case                Case              @relation(fields: [caseId], references: [id], onDelete: Restrict)
+  template            DocumentTemplate? @relation(fields: [templateId], references: [id], onDelete: Restrict)
+  createdByMembership TenantMembership? @relation(fields: [createdByMembershipId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId, caseId, generatedAt])
+  @@index([templateId])
+  @@index([createdByMembershipId])
 }
 
 model Claim {
@@ -548,6 +624,7 @@ model TenantMembership {
   roleAssignments      MembershipRole[]
   ownedCases           Case[]
   createdLedgerEntries CaseLedgerEntry[]
+  createdDocuments     CaseDocument[]
 
   @@unique([tenantId, userId])
   @@index([userId, deletedAt])

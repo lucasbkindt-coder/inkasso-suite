@@ -4,6 +4,8 @@ import type {
   CreateCaseInput,
   CreateLedgerEntryInput,
   CreatePaymentInput,
+  CaseDocument,
+  DocumentTemplate,
   InterestCostInput,
   LedgerEntry,
   LedgerResponse,
@@ -109,6 +111,22 @@ export const caseApi = {
   getLedger,
   getPayments: (caseId: string) =>
     request<{ items: PaymentApplyResponse["payment"][] }>(`/cases/${caseId}/payments`),
+  getDocumentTemplates: () => request<DocumentTemplate[]>("/document-templates"),
+  getDocuments: (caseId: string) => request<CaseDocument[]>(`/cases/${caseId}/documents`),
+  previewDocument: (caseId: string, templateId: string) =>
+    request<{ subject: string; renderedBody: string; templateVersion: number }>(
+      `/cases/${caseId}/documents/preview`,
+      { method: "POST", body: JSON.stringify({ templateId }) },
+    ),
+  generateDocument: (caseId: string, templateId: string) =>
+    request<CaseDocument>(`/cases/${caseId}/documents/generate`, {
+      method: "POST",
+      body: JSON.stringify({ templateId }),
+    }),
+  voidDocument: (caseId: string, id: string) =>
+    request<CaseDocument>(`/cases/${caseId}/documents/${id}/void`, { method: "POST" }),
+  documentDownloadUrl: (caseId: string, id: string) =>
+    `${apiUrl}/cases/${caseId}/documents/${id}/download`,
   createLedgerEntry: (caseId: string, payload: CreateLedgerEntryInput) =>
     request<LedgerEntry>(`/cases/${caseId}/ledger`, {
       method: "POST",

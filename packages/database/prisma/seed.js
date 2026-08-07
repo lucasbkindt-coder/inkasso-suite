@@ -175,6 +175,47 @@ async function main() {
   await seedPartyMasterData(tenant.id);
   await seedCase(tenant.id);
   await seedRvgReferenceData();
+  await seedDocumentTemplates(tenant.id);
+}
+
+async function seedDocumentTemplates(tenantId) {
+  const templates = [
+    [
+      "payment-request",
+      "Zahlungsaufforderung",
+      "PAYMENT_REQUEST",
+      "Zahlungsaufforderung zu {{case.caseNumber}}",
+      "Sehr geehrte Damen und Herren,\n\nbitte begleichen Sie die offene Forderung aus Rechnung {{claim.invoiceNumber}} in Höhe von {{ledger.openTotal}} EUR.\n\nMit freundlichen Grüßen\nRisePay",
+    ],
+    [
+      "second-payment-request",
+      "2. Zahlungsaufforderung",
+      "SECOND_PAYMENT_REQUEST",
+      "2. Zahlungsaufforderung zu {{case.caseNumber}}",
+      "Sehr geehrte Damen und Herren,\n\nbitte beachten Sie unsere Zahlungsaufforderung zur Rechnung {{claim.invoiceNumber}}. Der offene Betrag beträgt {{ledger.openTotal}} EUR.\n\nMit freundlichen Grüßen\nRisePay",
+    ],
+    [
+      "judicial-dunning-notice",
+      "Ankündigung gerichtliches Mahnverfahren",
+      "JUDICIAL_DUNNING_NOTICE",
+      "Hinweis zum weiteren Vorgehen",
+      "Sehr geehrte Damen und Herren,\n\nbitte prüfen Sie den offenen Betrag von {{ledger.openTotal}} EUR. Ohne eine Klärung kann die Prüfung weiterer rechtlicher Schritte erfolgen.\n\nMit freundlichen Grüßen\nRisePay",
+    ],
+    [
+      "enforcement-notice",
+      "Vollstreckungsankündigung",
+      "ENFORCEMENT_NOTICE",
+      "Hinweis zum Forderungsvorgang",
+      "Sehr geehrte Damen und Herren,\n\ndieses Schreiben dient als Vorlage für einen Forderungsvorgang. Der offene Betrag beträgt {{ledger.openTotal}} EUR.\n\nMit freundlichen Grüßen\nRisePay",
+    ],
+  ];
+  for (const [key, name, type, subject, bodyTemplate] of templates) {
+    await prisma.documentTemplate.upsert({
+      where: { tenantId_key_version: { tenantId, key, version: 1 } },
+      update: { name, type, subject, bodyTemplate, status: "ACTIVE" },
+      create: { tenantId, key, name, type, version: 1, status: "ACTIVE", subject, bodyTemplate },
+    });
+  }
 }
 
 async function seedRvgReferenceData() {
