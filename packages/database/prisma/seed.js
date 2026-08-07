@@ -1,12 +1,16 @@
 const {
   AddressType,
+  CasePhase,
+  CasePriority,
+  CaseStatus,
+  ClaimStatus,
   ContactType,
   MembershipStatus,
   PartyRoleType,
   PartyType,
   PermissionScope,
   PrismaClient,
-  RoleKind
+  RoleKind,
 } = require("@prisma/client");
 
 const prisma = new PrismaClient();
@@ -46,26 +50,26 @@ const standardPermissions = [
   ["document", "delete", PermissionScope.TENANT, "Dokumente löschen"],
   ["report", "read", PermissionScope.TENANT, "Auswertungen anzeigen"],
   ["settings", "read", PermissionScope.TENANT, "Einstellungen anzeigen"],
-  ["settings", "update", PermissionScope.TENANT, "Einstellungen verwalten"]
+  ["settings", "update", PermissionScope.TENANT, "Einstellungen verwalten"],
 ];
 
 async function main() {
   const tenant = await prisma.tenant.upsert({
     where: { slug: "inkasso-suite" },
     update: { deletedAt: null, isActive: true, name: "Inkasso Suite" },
-    create: { name: "Inkasso Suite", slug: "inkasso-suite" }
+    create: { name: "Inkasso Suite", slug: "inkasso-suite" },
   });
 
   const admin = await prisma.user.upsert({
     where: { email: "admin@example.com" },
     update: { deletedAt: null, isActive: true },
-    create: { email: "admin@example.com", displayName: "Tenant Owner" }
+    create: { email: "admin@example.com", displayName: "Tenant Owner" },
   });
 
   const membership = await prisma.tenantMembership.upsert({
     where: { tenantId_userId: { tenantId: tenant.id, userId: admin.id } },
     update: { deletedAt: null, status: MembershipStatus.ACTIVE },
-    create: { tenantId: tenant.id, userId: admin.id, status: MembershipStatus.ACTIVE }
+    create: { tenantId: tenant.id, userId: admin.id, status: MembershipStatus.ACTIVE },
   });
 
   const ownerRole = await prisma.role.upsert({
@@ -73,14 +77,14 @@ async function main() {
     update: {
       deletedAt: null,
       kind: RoleKind.SYSTEM,
-      description: "Vollzugriff innerhalb des Mandanten"
+      description: "Vollzugriff innerhalb des Mandanten",
     },
     create: {
       tenantId: tenant.id,
       name: "Tenant Owner",
       kind: RoleKind.SYSTEM,
-      description: "Vollzugriff innerhalb des Mandanten"
-    }
+      description: "Vollzugriff innerhalb des Mandanten",
+    },
   });
 
   const permissions = await Promise.all(
@@ -88,75 +92,171 @@ async function main() {
       prisma.permission.upsert({
         where: { resource_action_scope: { resource, action, scope } },
         update: { description },
-        create: { resource, action, scope, description }
-      })
-    )
+        create: { resource, action, scope, description },
+      }),
+    ),
   );
 
   await prisma.rolePermission.deleteMany({
     where: {
       roleId: ownerRole.id,
-      permissionId: { notIn: permissions.map((permission) => permission.id) }
-    }
+      permissionId: { notIn: permissions.map((permission) => permission.id) },
+    },
   });
 
   await prisma.rolePermission.createMany({
     data: permissions.map((permission) => ({
       roleId: ownerRole.id,
-      permissionId: permission.id
+      permissionId: permission.id,
     })),
-    skipDuplicates: true
+    skipDuplicates: true,
   });
 
   await prisma.membershipRole.upsert({
     where: {
       membershipId_roleId: {
         membershipId: membership.id,
-        roleId: ownerRole.id
-      }
+        roleId: ownerRole.id,
+      },
     },
     update: {},
-    create: { membershipId: membership.id, roleId: ownerRole.id }
+    create: { membershipId: membership.id, roleId: ownerRole.id },
   });
 
   await seedPartyMasterData(tenant.id);
+  await seedCase(tenant.id);
+}
+
+async function seedCase(tenantId) {
+  const client = await prisma.party.findFirst({
+    where: {
+      tenantId,
+      displayName: "Muster GmbH",
+      deletedAt: null,
+      roles: { some: { role: "CLIENT", deletedAt: null } },
+    },
+  });
+  const debtor = await prisma.party.findFirst({
+    where: {
+      tenantId,
+      displayName: "Max Mustermann",
+      deletedAt: null,
+      roles: { some: { role: "DEBTOR", deletedAt: null } },
+    },
+  });
+  if (!client || !debtor) throw new Error("Seed-Parties für die Inkassoakte fehlen.");
+  await prisma.caseNumberSequence.upsert({
+    where: { tenantId_year: { tenantId, year: 2026 } },
+    update: {},
+    create: { tenantId, year: 2026, lastNumber: 1 },
+  });
+  await prisma.case.upsert({
+    where: { tenantId_caseNumber: { tenantId, caseNumber: "0000001/2026" } },
+    update: {
+      status: CaseStatus.OPEN,
+      phase: CasePhase.OUT_OF_COURT,
+      priority: CasePriority.NORMAL,
+      deletedAt: null,
+      clientPartyId: client.id,
+      debtorPartyId: debtor.id,
+      claim: {
+        upsert: {
+          update: {
+            invoiceNumber: "RE-2026-1001",
+            invoiceDate: new Date("2026-01-15"),
+            dueDate: new Date("2026-02-14"),
+            defaultDate: new Date("2026-02-15"),
+            principalAmount: "1248.53",
+            currency: "EUR",
+            description: "Beispielrechnung für Seed-Inkassoakte",
+            status: ClaimStatus.OPEN,
+            deletedAt: null,
+          },
+          create: {
+            tenantId,
+            invoiceNumber: "RE-2026-1001",
+            invoiceDate: new Date("2026-01-15"),
+            dueDate: new Date("2026-02-14"),
+            defaultDate: new Date("2026-02-15"),
+            principalAmount: "1248.53",
+            currency: "EUR",
+            description: "Beispielrechnung für Seed-Inkassoakte",
+          },
+        },
+      },
+    },
+    create: {
+      tenantId,
+      caseNumber: "0000001/2026",
+      sequenceYear: 2026,
+      sequenceNumber: 1,
+      clientPartyId: client.id,
+      debtorPartyId: debtor.id,
+      status: CaseStatus.OPEN,
+      phase: CasePhase.OUT_OF_COURT,
+      priority: CasePriority.NORMAL,
+      claim: {
+        create: {
+          tenantId,
+          invoiceNumber: "RE-2026-1001",
+          invoiceDate: new Date("2026-01-15"),
+          dueDate: new Date("2026-02-14"),
+          defaultDate: new Date("2026-02-15"),
+          principalAmount: "1248.53",
+          currency: "EUR",
+          description: "Beispielrechnung für Seed-Inkassoakte",
+        },
+      },
+    },
+  });
 }
 
 async function seedPartyMasterData(tenantId) {
   const client = await findOrCreateParty({
     tenantId,
     type: PartyType.COMPANY,
-    displayName: "Muster GmbH"
+    displayName: "Muster GmbH",
   });
   await prisma.company.upsert({
     where: { partyId: client.id },
     update: { companyName: "Muster GmbH", legalForm: "GmbH" },
-    create: { partyId: client.id, companyName: "Muster GmbH", legalForm: "GmbH" }
+    create: { partyId: client.id, companyName: "Muster GmbH", legalForm: "GmbH" },
   });
   await seedRole(client.id, PartyRoleType.CLIENT);
-  await seedAddress(client.id, { street: "Musterstraße", houseNumber: "12", postalCode: "10115", city: "Berlin" });
+  await seedAddress(client.id, {
+    street: "Musterstraße",
+    houseNumber: "12",
+    postalCode: "10115",
+    city: "Berlin",
+  });
   await seedContact(client.id, { type: ContactType.EMAIL, value: "buchhaltung@muster-gmbh.de" });
 
   const debtor = await findOrCreateParty({
     tenantId,
     type: PartyType.PERSON,
-    displayName: "Max Mustermann"
+    displayName: "Max Mustermann",
   });
   await prisma.person.upsert({
     where: { partyId: debtor.id },
     update: { salutation: "Herr", firstName: "Max", lastName: "Mustermann" },
-    create: { partyId: debtor.id, salutation: "Herr", firstName: "Max", lastName: "Mustermann" }
+    create: { partyId: debtor.id, salutation: "Herr", firstName: "Max", lastName: "Mustermann" },
   });
   await seedRole(debtor.id, PartyRoleType.DEBTOR);
-  await seedAddress(debtor.id, { street: "Beispielweg", houseNumber: "7", postalCode: "50667", city: "Köln" });
+  await seedAddress(debtor.id, {
+    street: "Beispielweg",
+    houseNumber: "7",
+    postalCode: "50667",
+    city: "Köln",
+  });
   await seedContact(debtor.id, { type: ContactType.MOBILE, value: "+49 171 5550101" });
 }
 
 async function findOrCreateParty(data) {
   const existing = await prisma.party.findFirst({
-    where: { tenantId: data.tenantId, type: data.type, displayName: data.displayName }
+    where: { tenantId: data.tenantId, type: data.type, displayName: data.displayName },
   });
-  if (existing) return prisma.party.update({ where: { id: existing.id }, data: { deletedAt: null } });
+  if (existing)
+    return prisma.party.update({ where: { id: existing.id }, data: { deletedAt: null } });
   return prisma.party.create({ data });
 }
 
@@ -164,19 +264,33 @@ async function seedRole(partyId, role) {
   return prisma.partyRole.upsert({
     where: { partyId_role: { partyId, role } },
     update: { deletedAt: null },
-    create: { partyId, role }
+    create: { partyId, role },
   });
 }
 
 async function seedAddress(partyId, data) {
-  const existing = await prisma.address.findFirst({ where: { partyId, type: AddressType.PRIMARY } });
-  if (existing) return prisma.address.update({ where: { id: existing.id }, data: { ...data, type: AddressType.PRIMARY, isPrimary: true, deletedAt: null } });
-  return prisma.address.create({ data: { partyId, ...data, type: AddressType.PRIMARY, isPrimary: true } });
+  const existing = await prisma.address.findFirst({
+    where: { partyId, type: AddressType.PRIMARY },
+  });
+  if (existing)
+    return prisma.address.update({
+      where: { id: existing.id },
+      data: { ...data, type: AddressType.PRIMARY, isPrimary: true, deletedAt: null },
+    });
+  return prisma.address.create({
+    data: { partyId, ...data, type: AddressType.PRIMARY, isPrimary: true },
+  });
 }
 
 async function seedContact(partyId, data) {
-  const existing = await prisma.contact.findFirst({ where: { partyId, type: data.type, isPrimary: true } });
-  if (existing) return prisma.contact.update({ where: { id: existing.id }, data: { ...data, isPrimary: true, deletedAt: null } });
+  const existing = await prisma.contact.findFirst({
+    where: { partyId, type: data.type, isPrimary: true },
+  });
+  if (existing)
+    return prisma.contact.update({
+      where: { id: existing.id },
+      data: { ...data, isPrimary: true, deletedAt: null },
+    });
   return prisma.contact.create({ data: { partyId, ...data, isPrimary: true } });
 }
 

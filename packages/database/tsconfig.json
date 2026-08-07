@@ -4,5 +4,5 @@
     "composite": true,
     "noEmit": true
   },
-  "files": []
+  "include": ["src/**/*.ts"]
 }

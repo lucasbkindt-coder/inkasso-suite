@@ -1,130 +1,90 @@
-"use client";
+import { Building2, Calendar, Mail, MapPin, Phone, User } from "lucide-react";
 
-import {
-  Building2,
-  Calendar,
-  Mail,
-  MapPin,
-  Phone,
-  User,
-} from "lucide-react";
+import type { Case, CaseParty } from "@/types/case";
 
-export function CaseOverview() {
+import { formatCurrency, formatDate } from "./case-ui";
+
+export function CaseOverview({ caseRecord }: { caseRecord: Case }) {
+  const claim = caseRecord.claim;
   return (
-    <section className="rounded-2xl border bg-card p-6 shadow-lg">
-
-      <h2 className="mb-6 text-xl font-semibold">
-        Aktenübersicht
-      </h2>
-
-      <div className="grid gap-8 md:grid-cols-2">
-
+    <section className="rounded-2xl border bg-card p-6 shadow-sm">
+      <h2 className="mb-6 text-xl font-semibold">Aktenübersicht</h2>
+      <div className="grid gap-8 lg:grid-cols-2">
+        <PartySection party={caseRecord.debtorParty} title="Schuldner" />
         <div>
-
-          <h3 className="mb-4 font-semibold">
-            Schuldner
-          </h3>
-
-          <div className="space-y-4">
-
-            <InfoRow
-              icon={<User className="h-4 w-4" />}
-              label="Name"
-              value="Max Mustermann"
+          <h3 className="mb-4 font-semibold">Forderung</h3>
+          <div className="space-y-3">
+            <Info
+              icon={<Building2 className="size-4" />}
+              label="Auftraggeber"
+              value={caseRecord.clientParty.displayName}
             />
-
-            <InfoRow
-              icon={<MapPin className="h-4 w-4" />}
-              label="Adresse"
-              value="Musterstraße 12 · 77652 Offenburg"
+            <Info
+              icon={<Calendar className="size-4" />}
+              label="Rechnungsnummer"
+              value={claim?.invoiceNumber ?? "—"}
             />
-
-            <InfoRow
-              icon={<Phone className="h-4 w-4" />}
-              label="Telefon"
-              value="+49 781 123456"
+            <Info
+              icon={<Calendar className="size-4" />}
+              label="Rechnungsdatum"
+              value={formatDate(claim?.invoiceDate)}
             />
-
-            <InfoRow
-              icon={<Mail className="h-4 w-4" />}
-              label="E-Mail"
-              value="max.mustermann@example.de"
+            <Info
+              icon={<Calendar className="size-4" />}
+              label="Fälligkeit"
+              value={formatDate(claim?.dueDate)}
             />
-
+            <Info
+              icon={<Calendar className="size-4" />}
+              label="Verzug"
+              value={formatDate(claim?.defaultDate)}
+            />
+            <Info
+              icon={<User className="size-4" />}
+              label="Hauptforderung"
+              value={claim ? formatCurrency(claim.principalAmount, claim.currency) : "—"}
+            />
+            <Info
+              icon={<User className="size-4" />}
+              label="Beschreibung"
+              value={claim?.description || "—"}
+            />
           </div>
-
         </div>
-
-        <div>
-
-          <h3 className="mb-4 font-semibold">
-            Forderung
-          </h3>
-
-          <div className="space-y-4">
-
-            <InfoRow
-              icon={<Building2 className="h-4 w-4" />}
-              label="Gläubiger"
-              value="RisePay GmbH"
-            />
-
-            <InfoRow
-              icon={<Calendar className="h-4 w-4" />}
-              label="Fällig seit"
-              value="14.03.2026"
-            />
-
-            <InfoRow
-              icon={<Calendar className="h-4 w-4" />}
-              label="Verjährung"
-              value="31.12.2029"
-            />
-
-            <InfoRow
-              icon={<Calendar className="h-4 w-4" />}
-              label="Bearbeitungsstand"
-              value="Außergerichtliches Mahnverfahren"
-            />
-
-          </div>
-
-        </div>
-
       </div>
-
     </section>
   );
 }
 
-function InfoRow({
-  icon,
-  label,
-  value,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value: string;
-}) {
+function PartySection({ party, title }: { party: CaseParty; title: string }) {
+  const address = party.addresses[0];
+  const phone = party.contacts.find((contact) => ["PHONE", "MOBILE"].includes(contact.type));
+  const email = party.contacts.find((contact) => contact.type === "EMAIL");
+  const addressText = address
+    ? [address.street, address.houseNumber, address.postalCode, address.city]
+        .filter(Boolean)
+        .join(" · ")
+    : "—";
   return (
-    <div className="flex gap-4 rounded-xl border p-4">
-
-      <div className="mt-1 text-primary">
-        {icon}
+    <div>
+      <h3 className="mb-4 font-semibold">{title}</h3>
+      <div className="space-y-3">
+        <Info icon={<User className="size-4" />} label="Name" value={party.displayName} />
+        <Info icon={<MapPin className="size-4" />} label="Adresse" value={addressText} />
+        <Info icon={<Phone className="size-4" />} label="Telefon" value={phone?.value ?? "—"} />
+        <Info icon={<Mail className="size-4" />} label="E-Mail" value={email?.value ?? "—"} />
       </div>
-
+    </div>
+  );
+}
+function Info({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
+  return (
+    <div className="flex gap-3 rounded-xl border p-3">
+      <div className="mt-0.5 text-primary">{icon}</div>
       <div>
-
-        <p className="text-xs uppercase tracking-wide text-muted-foreground">
-          {label}
-        </p>
-
-        <p className="mt-1 font-medium">
-          {value}
-        </p>
-
+        <p className="text-xs uppercase tracking-wide text-muted-foreground">{label}</p>
+        <p className="mt-1 break-words text-sm font-medium">{value}</p>
       </div>
-
     </div>
   );
 }

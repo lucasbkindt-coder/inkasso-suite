@@ -1,18 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import {
-  Clock3,
-  FileText,
-  NotebookPen,
-  Wallet,
-} from "lucide-react";
+import { Clock3, FileText, NotebookPen, Wallet } from "lucide-react";
 
-type Tab =
-  | "overview"
-  | "documents"
-  | "payments"
-  | "history";
+type Tab = "overview" | "documents" | "payments" | "history";
 
 const tabs: {
   id: Tab;
@@ -56,9 +47,7 @@ export function CaseTabs() {
               type="button"
               onClick={() => setActive(tab.id)}
               className={`flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-medium transition ${
-                active === tab.id
-                  ? "bg-primary text-primary-foreground"
-                  : "hover:bg-muted"
+                active === tab.id ? "bg-primary text-primary-foreground" : "hover:bg-muted"
               }`}
             >
               <Icon className="h-4 w-4" />

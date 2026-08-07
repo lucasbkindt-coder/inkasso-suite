@@ -59,6 +59,39 @@ enum ContactType {
   OTHER
 }
 
+enum CaseStatus {
+  OPEN
+  CLOSED
+  CANCELLED
+}
+
+enum CasePhase {
+  NEW
+  PRE_COLLECTION
+  OUT_OF_COURT
+  PAYMENT_PLAN
+  JUDICIAL_DUNNING
+  LITIGATION
+  ENFORCEMENT
+  MONITORING
+  COMPLETED
+}
+
+enum CasePriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
+enum ClaimStatus {
+  OPEN
+  PARTIALLY_PAID
+  PAID
+  DISPUTED
+  CANCELLED
+}
+
 model User {
   id          String    @id @default(uuid()) @db.Uuid
   email       String    @unique
@@ -87,8 +120,76 @@ model Tenant {
   roles       Role[]
   debtors     Debtor[]
   parties     Party[]
+  cases       Case[]
+  claims      Claim[]
+  sequences   CaseNumberSequence[]
 
   @@index([deletedAt])
+}
+
+model Case {
+  id                String            @id @default(uuid()) @db.Uuid
+  tenantId          String            @db.Uuid
+  caseNumber        String
+  sequenceYear      Int
+  sequenceNumber    Int
+  clientPartyId     String            @db.Uuid
+  debtorPartyId     String            @db.Uuid
+  ownerMembershipId String?           @db.Uuid
+  status            CaseStatus        @default(OPEN)
+  phase             CasePhase         @default(NEW)
+  priority          CasePriority      @default(NORMAL)
+  openedAt          DateTime          @default(now())
+  closedAt          DateTime?
+  internalNotes     String?
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  deletedAt         DateTime?
+  tenant            Tenant            @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  clientParty       Party             @relation("CaseClient", fields: [clientPartyId], references: [id], onDelete: Restrict)
+  debtorParty       Party             @relation("CaseDebtor", fields: [debtorPartyId], references: [id], onDelete: Restrict)
+  ownerMembership   TenantMembership? @relation(fields: [ownerMembershipId], references: [id], onDelete: Restrict)
+  claim             Claim?
+
+  @@unique([tenantId, caseNumber])
+  @@unique([tenantId, sequenceYear, sequenceNumber])
+  @@index([tenantId, status, deletedAt])
+  @@index([tenantId, phase, deletedAt])
+  @@index([clientPartyId])
+  @@index([debtorPartyId])
+  @@index([ownerMembershipId])
+}
+
+model Claim {
+  id              String      @id @default(uuid()) @db.Uuid
+  caseId          String      @unique @db.Uuid
+  tenantId        String      @db.Uuid
+  invoiceNumber   String
+  invoiceDate     DateTime    @db.Date
+  dueDate         DateTime    @db.Date
+  defaultDate     DateTime?   @db.Date
+  principalAmount Decimal     @db.Decimal(15, 2)
+  currency        String      @default("EUR") @db.Char(3)
+  description     String?
+  status          ClaimStatus @default(OPEN)
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  deletedAt       DateTime?
+  tenant          Tenant      @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  case            Case        @relation(fields: [caseId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId, status, deletedAt])
+  @@index([tenantId, invoiceNumber])
+}
+
+model CaseNumberSequence {
+  tenantId   String   @db.Uuid
+  year       Int
+  lastNumber Int      @default(0)
+  updatedAt  DateTime @updatedAt
+  tenant     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+
+  @@id([tenantId, year])
 }
 
 model Party {
@@ -100,12 +201,14 @@ model Party {
   updatedAt   DateTime  @updatedAt
   deletedAt   DateTime?
 
-  tenant    Tenant      @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-  person    Person?
-  company   Company?
-  roles     PartyRole[]
-  addresses Address[]
-  contacts  Contact[]
+  tenant      Tenant      @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  person      Person?
+  company     Company?
+  roles       PartyRole[]
+  addresses   Address[]
+  contacts    Contact[]
+  clientCases Case[]      @relation("CaseClient")
+  debtorCases Case[]      @relation("CaseDebtor")
 
   @@index([tenantId, deletedAt, displayName])
   @@index([tenantId, type, deletedAt])
@@ -237,6 +340,7 @@ model TenantMembership {
 
   teamMemberships TeamMembership[]
   roleAssignments MembershipRole[]
+  ownedCases      Case[]
 
   @@unique([tenantId, userId])
   @@index([userId, deletedAt])
