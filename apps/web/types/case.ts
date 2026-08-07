@@ -143,11 +143,50 @@ export type LedgerEntry = {
   externalReference: string | null;
   source: string | null;
   reversedEntryId: string | null;
+  allocatedAmount?: string;
+  remainingAmount?: string | null;
+  paymentAllocations?: PaymentAllocation[];
 };
 
 export type LedgerResponse = {
   items: LedgerEntry[];
-  totals: { totalDebit: string; totalCredit: string; balance: string };
+  totals: {
+    totalDebit: string;
+    totalCredit: string;
+    balance: string;
+    openCosts: string;
+    openInterest: string;
+    openPrincipal: string;
+    totalOpen: string;
+    unallocatedPayments: string;
+  };
+};
+
+export type PaymentAllocation = {
+  id?: string;
+  targetEntryId: string;
+  amount: string;
+  allocationOrder: number;
+  policy?: "BGB_367_DEFAULT" | "CUSTOM";
+  targetType?: LedgerEntryType;
+  targetDescription?: string;
+  targetEntry?: { description: string; type: LedgerEntryType };
+};
+export type CreatePaymentInput = {
+  amount: string;
+  bookingDate: string;
+  valueDate?: string;
+  currency?: string;
+  reference?: string;
+  description?: string;
+  allocationPolicy?: "BGB_367_DEFAULT" | "CUSTOM";
+  allocations?: { targetEntryId: string; amount: string }[];
+};
+export type PaymentApplyResponse = {
+  payment: LedgerEntry;
+  allocations: PaymentAllocation[];
+  unallocatedAmount: string;
+  balances: LedgerResponse["totals"];
 };
 
 export type CreateLedgerEntryInput = {

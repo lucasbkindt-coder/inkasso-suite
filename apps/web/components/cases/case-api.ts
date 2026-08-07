@@ -3,9 +3,11 @@ import type {
   CasesResponse,
   CreateCaseInput,
   CreateLedgerEntryInput,
+  CreatePaymentInput,
   InterestCostInput,
   LedgerEntry,
   LedgerResponse,
+  PaymentApplyResponse,
   RvgCostInput,
   UpdateCaseInput,
 } from "@/types/case";
@@ -76,8 +78,15 @@ export const caseApi = {
   getParties: (role: "CLIENT" | "DEBTOR", search?: string) =>
     request<PartiesResponse>(`/parties?${queryString({ role, search, limit: 100 })}`),
   getLedger: (caseId: string) => request<LedgerResponse>(`/cases/${caseId}/ledger`),
+  getPayments: (caseId: string) =>
+    request<{ items: PaymentApplyResponse["payment"][] }>(`/cases/${caseId}/payments`),
   createLedgerEntry: (caseId: string, payload: CreateLedgerEntryInput) =>
     request<LedgerEntry>(`/cases/${caseId}/ledger`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  applyPayment: (caseId: string, payload: CreatePaymentInput) =>
+    request<PaymentApplyResponse>(`/cases/${caseId}/payments`, {
       method: "POST",
       body: JSON.stringify(payload),
     }),

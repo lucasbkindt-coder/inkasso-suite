@@ -16,6 +16,7 @@ import {
 import { LegalReferenceSyncService } from "../legal-references/legal-reference-sync.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { TenantContextService } from "../tenant/tenant-context.service";
+import { LedgerService } from "../ledger/ledger.service";
 import {
   CaseInterestCostDto,
   CaseRvgCostDto,
@@ -37,6 +38,7 @@ export class CostsService {
     private readonly prisma: PrismaService,
     private readonly legal: LegalReferenceSyncService,
     private readonly tenantContext: TenantContextService,
+    private readonly ledger: LedgerService,
   ) {}
   async rvgPreview(dto: RvgPreviewDto) {
     const date = new Date(dto.calculationDate),
@@ -211,12 +213,35 @@ export class CostsService {
   async caseInterestPreview(caseId: string, dto: CaseInterestCostDto) {
     const claim = await this.getCaseClaim(caseId);
     const fromDate = dto.fromDate ?? this.dateOnly(claim.defaultDate ?? claim.dueDate);
-    return this.interestPreview({
-      ...dto,
+    const toDate = dto.toDate ?? this.dateOnly(new Date());
+    const principalPeriods = await this.ledger.getPrincipalBalancePeriods(
+      caseId,
+      new Date(fromDate),
+      new Date(toDate),
+    );
+    const previews = await Promise.all(
+      principalPeriods.map((period) =>
+        this.interestPreview({
+          ...dto,
+          principalAmount: period.principalBalance.toFixed(2),
+          fromDate: this.dateOnly(period.from),
+          toDate: this.dateOnly(period.to),
+        }),
+      ),
+    );
+    const periods = previews.flatMap((preview) =>
+      preview.periods.map((period) => ({ ...period, principalAmount: preview.principalAmount })),
+    );
+    return {
       principalAmount: claim.principalAmount.toFixed(2),
-      fromDate,
-      toDate: dto.toDate ?? this.dateOnly(new Date()),
-    });
+      totalInterest: money(
+        periods.reduce((total, period) => total.plus(period.interestAmount), new Prisma.Decimal(0)),
+      ),
+      calculationFrom: new Date(fromDate),
+      calculationTo: new Date(toDate),
+      dayConvention: "actual/365",
+      periods,
+    };
   }
 
   async applyCaseInterest(caseId: string, dto: CaseInterestCostDto) {

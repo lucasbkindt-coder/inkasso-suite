@@ -14,6 +14,7 @@ import type {
 
 import { caseApi } from "./case-api";
 import { CaseCostActions } from "./case-cost-dialogs";
+import { CasePaymentDialog } from "./case-payment-dialog";
 import { formatCurrency, formatDate } from "./case-ui";
 
 const typeLabels: Record<Exclude<LedgerEntryType, "PRINCIPAL">, string> = {
@@ -32,6 +33,7 @@ export function CaseLedger({ caseId }: { caseId: string }) {
   const [ledger, setLedger] = React.useState<LedgerResponse | null>(null);
   const [error, setError] = React.useState("");
   const [open, setOpen] = React.useState(false);
+  const [paymentOpen, setPaymentOpen] = React.useState(false);
   const load = React.useCallback(async () => {
     try {
       setLedger(await caseApi.getLedger(caseId));
@@ -65,12 +67,21 @@ export function CaseLedger({ caseId }: { caseId: string }) {
         </div>
         <div className="flex flex-wrap gap-2">
           <CaseCostActions caseId={caseId} onApplied={load} />
+          <Button onClick={() => setPaymentOpen(true)} variant="outline">
+            Zahlung erfassen
+          </Button>
           <Button onClick={() => setOpen(true)}>
             <Plus className="size-4" /> Buchung erfassen
           </Button>
         </div>
       </div>
       <LedgerDialog caseId={caseId} onOpenChange={setOpen} onSaved={load} open={open} />
+      <CasePaymentDialog
+        caseId={caseId}
+        onOpenChange={setPaymentOpen}
+        onSaved={load}
+        open={paymentOpen}
+      />
       {error ? <p className="mt-4 text-sm text-destructive">{error}</p> : null}
       {!ledger ? (
         <p className="mt-6 text-sm text-muted-foreground">Forderungskonto wird geladen …</p>
@@ -89,10 +100,17 @@ export function CaseLedger({ caseId }: { caseId: string }) {
                 .toString()
                 .replace(/(\d{2})$/, ".$1")}
             />
-            <Total label="Soll gesamt" value={ledger.totals.totalDebit} />
-            <Total label="Zahlungen / Gutschriften" value={ledger.totals.totalCredit} />
-            <Total emphasis label="Offener Saldo" value={ledger.totals.balance} />
+            <Total label="Offene Kosten" value={ledger.totals.openCosts} />
+            <Total label="Offene Zinsen" value={ledger.totals.openInterest} />
+            <Total label="Offene Hauptforderung" value={ledger.totals.openPrincipal} />
+            <Total emphasis label="Gesamt offen" value={ledger.totals.totalOpen} />
           </div>
+          {cents(ledger.totals.unallocatedPayments) > 0n ? (
+            <p className="mt-3 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-foreground">
+              Nicht zugeordnetes Guthaben:{" "}
+              {formatCurrency(ledger.totals.unallocatedPayments, "EUR")}
+            </p>
+          ) : null}
           <div className="mt-6 overflow-x-auto">
             <table className="min-w-[760px] w-full text-left text-sm">
               <thead className="border-b bg-muted/40 text-xs uppercase text-muted-foreground">
@@ -124,6 +142,25 @@ export function CaseLedger({ caseId }: { caseId: string }) {
                         </p>
                         {entry.status === "REVERSED" ? (
                           <span className="text-xs text-muted-foreground">Storniert</span>
+                        ) : null}
+                        {entry.remainingAmount !== null && entry.remainingAmount !== undefined ? (
+                          <span className="mt-1 block text-xs text-muted-foreground">
+                            Offen: {formatCurrency(entry.remainingAmount, entry.currency)}
+                          </span>
+                        ) : null}
+                        {entry.type === "PAYMENT" && entry.paymentAllocations?.length ? (
+                          <div className="mt-1 space-y-1 text-xs text-muted-foreground">
+                            <span className="block">Tilgungsverteilung:</span>
+                            {entry.paymentAllocations.map((allocation) => (
+                              <span
+                                className="block"
+                                key={`${allocation.targetEntryId}-${allocation.allocationOrder}`}
+                              >
+                                {allocation.targetEntry?.description ?? "Forderungsposition"}:{" "}
+                                {formatCurrency(allocation.amount, entry.currency)}
+                              </span>
+                            ))}
+                          </div>
                         ) : null}
                       </td>
                       <td className="px-3 py-3">

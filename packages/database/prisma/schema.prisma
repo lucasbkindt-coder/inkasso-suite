@@ -115,6 +115,16 @@ enum LedgerEntryStatus {
   REVERSED
 }
 
+enum AllocationPolicy {
+  BGB_367_DEFAULT
+  CUSTOM
+}
+
+enum PaymentAllocationStatus {
+  ACTIVE
+  REVERSED
+}
+
 enum LegalReferenceSyncStatus {
   RUNNING
   SUCCEEDED
@@ -223,45 +233,47 @@ model Tenant {
   updatedAt DateTime  @updatedAt
   deletedAt DateTime?
 
-  memberships      TenantMembership[]
-  teams            Team[]
-  roles            Role[]
-  debtors          Debtor[]
-  parties          Party[]
-  cases            Case[]
-  claims           Claim[]
-  sequences        CaseNumberSequence[]
-  ledgerEntries    CaseLedgerEntry[]
-  costCalculations CaseCostCalculation[]
+  memberships        TenantMembership[]
+  teams              Team[]
+  roles              Role[]
+  debtors            Debtor[]
+  parties            Party[]
+  cases              Case[]
+  claims             Claim[]
+  sequences          CaseNumberSequence[]
+  ledgerEntries      CaseLedgerEntry[]
+  costCalculations   CaseCostCalculation[]
+  paymentAllocations PaymentAllocation[]
 
   @@index([deletedAt])
 }
 
 model Case {
-  id                String                @id @default(uuid()) @db.Uuid
-  tenantId          String                @db.Uuid
-  caseNumber        String
-  sequenceYear      Int
-  sequenceNumber    Int
-  clientPartyId     String                @db.Uuid
-  debtorPartyId     String                @db.Uuid
-  ownerMembershipId String?               @db.Uuid
-  status            CaseStatus            @default(OPEN)
-  phase             CasePhase             @default(NEW)
-  priority          CasePriority          @default(NORMAL)
-  openedAt          DateTime              @default(now())
-  closedAt          DateTime?
-  internalNotes     String?
-  createdAt         DateTime              @default(now())
-  updatedAt         DateTime              @updatedAt
-  deletedAt         DateTime?
-  tenant            Tenant                @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-  clientParty       Party                 @relation("CaseClient", fields: [clientPartyId], references: [id], onDelete: Restrict)
-  debtorParty       Party                 @relation("CaseDebtor", fields: [debtorPartyId], references: [id], onDelete: Restrict)
-  ownerMembership   TenantMembership?     @relation(fields: [ownerMembershipId], references: [id], onDelete: Restrict)
-  claim             Claim?
-  ledgerEntries     CaseLedgerEntry[]
-  costCalculations  CaseCostCalculation[]
+  id                 String                @id @default(uuid()) @db.Uuid
+  tenantId           String                @db.Uuid
+  caseNumber         String
+  sequenceYear       Int
+  sequenceNumber     Int
+  clientPartyId      String                @db.Uuid
+  debtorPartyId      String                @db.Uuid
+  ownerMembershipId  String?               @db.Uuid
+  status             CaseStatus            @default(OPEN)
+  phase              CasePhase             @default(NEW)
+  priority           CasePriority          @default(NORMAL)
+  openedAt           DateTime              @default(now())
+  closedAt           DateTime?
+  internalNotes      String?
+  createdAt          DateTime              @default(now())
+  updatedAt          DateTime              @updatedAt
+  deletedAt          DateTime?
+  tenant             Tenant                @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  clientParty        Party                 @relation("CaseClient", fields: [clientPartyId], references: [id], onDelete: Restrict)
+  debtorParty        Party                 @relation("CaseDebtor", fields: [debtorPartyId], references: [id], onDelete: Restrict)
+  ownerMembership    TenantMembership?     @relation(fields: [ownerMembershipId], references: [id], onDelete: Restrict)
+  claim              Claim?
+  ledgerEntries      CaseLedgerEntry[]
+  costCalculations   CaseCostCalculation[]
+  paymentAllocations PaymentAllocation[]
 
   @@unique([tenantId, caseNumber])
   @@unique([tenantId, sequenceYear, sequenceNumber])
@@ -309,6 +321,7 @@ model CaseLedgerEntry {
   reversedEntryId       String?           @unique @db.Uuid
   createdByMembershipId String?           @db.Uuid
   costCalculationId     String?           @db.Uuid
+  allocationPolicy      AllocationPolicy?
   createdAt             DateTime          @default(now())
   updatedAt             DateTime          @updatedAt
 
@@ -318,6 +331,8 @@ model CaseLedgerEntry {
   reversal            CaseLedgerEntry?     @relation("LedgerReversal")
   createdByMembership TenantMembership?    @relation(fields: [createdByMembershipId], references: [id], onDelete: Restrict)
   costCalculation     CaseCostCalculation? @relation(fields: [costCalculationId], references: [id], onDelete: Restrict)
+  paymentAllocations  PaymentAllocation[]  @relation("PaymentAllocations")
+  targetAllocations   PaymentAllocation[]  @relation("TargetAllocations")
 
   @@index([tenantId, caseId, bookingDate])
   @@index([caseId, status])
@@ -325,6 +340,30 @@ model CaseLedgerEntry {
   @@index([externalReference])
   @@index([createdByMembershipId])
   @@index([costCalculationId])
+}
+
+model PaymentAllocation {
+  id              String                  @id @default(uuid()) @db.Uuid
+  tenantId        String                  @db.Uuid
+  caseId          String                  @db.Uuid
+  paymentEntryId  String                  @db.Uuid
+  targetEntryId   String                  @db.Uuid
+  amount          Decimal                 @db.Decimal(15, 2)
+  policy          AllocationPolicy
+  allocationOrder Int
+  status          PaymentAllocationStatus @default(ACTIVE)
+  createdAt       DateTime                @default(now())
+  reversedAt      DateTime?
+
+  tenant       Tenant          @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  case         Case            @relation(fields: [caseId], references: [id], onDelete: Restrict)
+  paymentEntry CaseLedgerEntry @relation("PaymentAllocations", fields: [paymentEntryId], references: [id], onDelete: Restrict)
+  targetEntry  CaseLedgerEntry @relation("TargetAllocations", fields: [targetEntryId], references: [id], onDelete: Restrict)
+
+  @@unique([paymentEntryId, targetEntryId])
+  @@unique([paymentEntryId, allocationOrder])
+  @@index([tenantId, caseId, status])
+  @@index([targetEntryId, status])
 }
 
 model Claim {

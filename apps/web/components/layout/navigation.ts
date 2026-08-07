@@ -1,7 +1,7 @@
 import {
-  BadgeEuro,
   Building2,
   Files,
+  FolderKanban,
   LayoutDashboard,
   Settings,
   ShieldCheck,
@@ -12,18 +12,23 @@ import {
 
 export const navigationGroups = [
   {
-    label: "Arbeitsbereich",
+    label: "Übersicht",
     items: [
       { href: "/", label: "Dashboard", icon: LayoutDashboard },
-      { href: "/schuldner", label: "Schuldner", icon: Users },
+    ],
+  },
+  {
+    label: "Forderungsmanagement",
+    items: [
+      { href: "/akten", label: "Inkassoakten", icon: FolderKanban },
       { href: "/parteien", label: "Parteien", icon: UsersRound },
-      { href: "/forderungen", label: "Forderungen", icon: BadgeEuro },
+      { href: "/schuldner", label: "Schuldner", icon: Users },
       { href: "/zahlungen", label: "Zahlungen", icon: WalletCards },
       { href: "/dokumente", label: "Dokumente", icon: Files },
     ],
   },
   {
-    label: "Verwaltung",
+    label: "Administration",
     items: [
       { href: "/mandanten", label: "Mandanten", icon: Building2 },
       { href: "/benutzer", label: "Benutzer", icon: UsersRound },
@@ -35,11 +40,11 @@ export const navigationGroups = [
 ] as const;
 
 export const pageTitles: Record<string, string> = {
-  "/": "Dashboard",
+  "/": "Übersicht",
+  "/akten": "Inkassoakten",
   "/schuldner": "Schuldner",
   "/parteien": "Parteien",
   "/mandanten": "Mandanten",
-  "/forderungen": "Forderungen",
   "/zahlungen": "Zahlungen",
   "/dokumente": "Dokumente",
   "/benutzer": "Benutzer",
