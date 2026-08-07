@@ -4,6 +4,8 @@ import { PrismaService } from "../prisma/prisma.service";
 import { TenantContextService } from "../tenant/tenant-context.service";
 import { DocumentRenderDto } from "./dto/document.dto";
 import { LocalDocumentStorage } from "./local-document-storage";
+import { TenantDocumentSettingsDto } from "./dto/tenant-document-settings.dto";
+import { TemplateDto } from "./dto/template.dto";
 
 @Injectable()
 export class DocumentsService {
@@ -12,11 +14,81 @@ export class DocumentsService {
     private readonly tenant: TenantContextService,
     private readonly storage: LocalDocumentStorage,
   ) {}
-  async templates() {
+  async settings() {
+    const tenantId = await this.tenant.getTenantId();
+    return this.prisma.tenantDocumentSettings.findUnique({ where: { tenantId } });
+  }
+  async saveSettings(dto: TenantDocumentSettingsDto) {
+    const tenantId = await this.tenant.getTenantId();
+    return this.prisma.tenantDocumentSettings.upsert({
+      where: { tenantId },
+      update: dto,
+      create: { tenantId, ...dto },
+    });
+  }
+  async templates(includeArchived = false) {
     const tenantId = await this.tenant.getTenantId();
     return this.prisma.documentTemplate.findMany({
-      where: { status: TemplateStatus.ACTIVE, OR: [{ tenantId }, { tenantId: null }] },
+      where: {
+        ...(includeArchived ? {} : { status: TemplateStatus.ACTIVE }),
+        OR: [{ tenantId }, { tenantId: null }],
+      },
       orderBy: [{ type: "asc" }, { version: "desc" }],
+    });
+  }
+  async templateById(id: string) {
+    const tenantId = await this.tenant.getTenantId();
+    const template = await this.prisma.documentTemplate.findFirst({ where: { id, tenantId } });
+    if (!template) throw new NotFoundException("Dokumentvorlage wurde nicht gefunden.");
+    return template;
+  }
+  async createTemplate(dto: TemplateDto) {
+    const tenantId = await this.tenant.getTenantId();
+    this.validateTemplate(dto);
+    const existing = await this.prisma.documentTemplate.findFirst({
+      where: { tenantId, key: dto.key },
+      orderBy: { version: "desc" },
+    });
+    if (existing)
+      throw new BadRequestException(
+        "Für diesen Key existiert bereits eine Vorlage. Bitte eine neue Version anlegen.",
+      );
+    return this.prisma.documentTemplate.create({
+      data: { ...dto, tenantId, version: 1, status: TemplateStatus.ACTIVE },
+    });
+  }
+  async newVersion(id: string, dto: TemplateDto) {
+    const current = await this.templateById(id);
+    if (dto.key !== current.key)
+      throw new BadRequestException("Der Key einer Vorlagenversion darf nicht geändert werden.");
+    this.validateTemplate(dto);
+    const tenantId = current.tenantId;
+    if (!tenantId)
+      throw new BadRequestException("Systemvorlagen können hier nicht versioniert werden.");
+    return this.prisma.$transaction(async (tx) => {
+      const highest = await tx.documentTemplate.findFirst({
+        where: { tenantId, key: current.key },
+        orderBy: { version: "desc" },
+      });
+      await tx.documentTemplate.updateMany({
+        where: { tenantId, key: current.key, status: TemplateStatus.ACTIVE },
+        data: { status: TemplateStatus.ARCHIVED },
+      });
+      return tx.documentTemplate.create({
+        data: {
+          ...dto,
+          tenantId,
+          version: (highest?.version ?? 0) + 1,
+          status: TemplateStatus.ACTIVE,
+        },
+      });
+    });
+  }
+  async archiveTemplate(id: string) {
+    const template = await this.templateById(id);
+    return this.prisma.documentTemplate.update({
+      where: { id: template.id },
+      data: { status: TemplateStatus.ARCHIVED },
     });
   }
   async list(caseId: string) {
@@ -95,14 +167,19 @@ export class DocumentsService {
   private async template(dto: DocumentRenderDto, tenantId: string) {
     if (!dto.templateId && !dto.templateKey)
       throw new BadRequestException("Eine Dokumentvorlage ist erforderlich.");
+    const alternatives = [
+      ...(dto.templateId ? [{ id: dto.templateId, tenantId }] : []),
+      ...(dto.templateKey
+        ? [
+            { key: dto.templateKey, tenantId },
+            { key: dto.templateKey, tenantId: null },
+          ]
+        : []),
+    ];
     const template = await this.prisma.documentTemplate.findFirst({
       where: {
         status: TemplateStatus.ACTIVE,
-        OR: [
-          { id: dto.templateId, tenantId },
-          { key: dto.templateKey, tenantId },
-          { key: dto.templateKey, tenantId: null },
-        ],
+        OR: alternatives,
       },
     });
     if (!template) throw new NotFoundException("Aktive Dokumentvorlage wurde nicht gefunden.");
@@ -122,7 +199,12 @@ export class DocumentsService {
     return value;
   }
   private async snapshot(caseId: string, tenantId: string) {
-    const data = await this.caseData(caseId, tenantId);
+    const [data, settings] = await Promise.all([
+      this.caseData(caseId, tenantId),
+      this.prisma.tenantDocumentSettings.findUnique({ where: { tenantId } }),
+    ]);
+    if (!settings)
+      throw new BadRequestException("Unternehmensdaten für Schreiben sind nicht konfiguriert.");
     const claim = data.claim;
     if (!claim) throw new NotFoundException("Forderung wurde nicht gefunden.");
     const entries = await this.prisma.caseLedgerEntry.findMany({
@@ -166,6 +248,27 @@ export class DocumentsService {
         openCosts,
         openTotal: new Prisma.Decimal(openPrincipal).plus(openInterest).plus(openCosts).toFixed(2),
       },
+      payments: {
+        total: entries
+          .filter((entry) => entry.type === "PAYMENT" && entry.side === "CREDIT")
+          .reduce((sum, entry) => sum.plus(entry.amount), new Prisma.Decimal(0))
+          .toFixed(2),
+      },
+      company: {
+        name: settings.companyName,
+        legalName: settings.legalName ?? "",
+        street: settings.street,
+        houseNumber: settings.houseNumber ?? "",
+        postalCode: settings.postalCode,
+        city: settings.city,
+        phone: settings.phone ?? "",
+        email: settings.email ?? "",
+        website: settings.website ?? "",
+        iban: settings.iban ?? "",
+        bic: settings.bic ?? "",
+        bankName: settings.bankName ?? "",
+        footer: settings.documentFooter ?? "",
+      },
       today: this.date(new Date()),
     } as Record<string, unknown>;
   }
@@ -185,12 +288,55 @@ export class DocumentsService {
       return String(value);
     });
   }
+  private validateTemplate(dto: Pick<TemplateDto, "subject" | "bodyTemplate">) {
+    const allowed = new Set([
+      "case.caseNumber",
+      "client.displayName",
+      "client.address.street",
+      "client.address.postalCode",
+      "client.address.city",
+      "debtor.displayName",
+      "debtor.address.street",
+      "debtor.address.postalCode",
+      "debtor.address.city",
+      "claim.invoiceNumber",
+      "claim.invoiceDate",
+      "claim.dueDate",
+      "claim.principalAmount",
+      "ledger.openPrincipal",
+      "ledger.openInterest",
+      "ledger.openCosts",
+      "ledger.openTotal",
+      "ledger.principal",
+      "ledger.interest",
+      "ledger.costs",
+      "ledger.total",
+      "payments.total",
+      "today",
+      "company.name",
+      "company.legalName",
+      "company.street",
+      "company.houseNumber",
+      "company.postalCode",
+      "company.city",
+      "company.phone",
+      "company.email",
+      "company.website",
+      "company.iban",
+      "company.bic",
+      "company.bankName",
+    ]);
+    for (const value of [dto.subject ?? "", dto.bodyTemplate])
+      for (const match of value.matchAll(/{{\s*([\w.]+)\s*}}/g))
+        if (!allowed.has(match[1]))
+          throw new BadRequestException(`Unbekannter Platzhalter: ${match[1]}`);
+  }
   private date(value: Date) {
     return new Intl.DateTimeFormat("de-DE").format(value);
   }
   private pdf(subject: string, body: string, snapshot: Record<string, unknown>) {
     const lines = [
-      "RisePay",
+      `${(snapshot.company as { name: string }).name}`,
       "Forderungsmanagement",
       "",
       `${(snapshot.debtor as { displayName: string }).displayName}`,
@@ -201,6 +347,20 @@ export class DocumentsService {
       subject,
       "",
       ...body.split("\n"),
+      "",
+      `Hauptforderung: ${(snapshot.ledger as { openPrincipal: string }).openPrincipal} EUR`,
+      `Kosten: ${(snapshot.ledger as { openCosts: string }).openCosts} EUR`,
+      `Zinsen: ${(snapshot.ledger as { openInterest: string }).openInterest} EUR`,
+      `Offen gesamt: ${(snapshot.ledger as { openTotal: string }).openTotal} EUR`,
+      ...(snapshot.company && (snapshot.company as { iban: string }).iban
+        ? [
+            "",
+            `Zahlungsempfänger: ${(snapshot.company as { name: string }).name}`,
+            `IBAN: ${(snapshot.company as { iban: string }).iban}`,
+            `BIC: ${(snapshot.company as { bic: string }).bic}`,
+            `Verwendungszweck: ${(snapshot.case as { caseNumber: string }).caseNumber}`,
+          ]
+        : []),
     ];
     const content = lines
       .map(

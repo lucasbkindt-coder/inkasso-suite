@@ -6,6 +6,10 @@ import type {
   CreatePaymentInput,
   CaseDocument,
   DocumentTemplate,
+  DocumentTemplateInput,
+  DocumentPreview,
+  TenantDocumentSettings,
+  TenantDocumentSettingsInput,
   InterestCostInput,
   LedgerEntry,
   LedgerResponse,
@@ -111,13 +115,36 @@ export const caseApi = {
   getLedger,
   getPayments: (caseId: string) =>
     request<{ items: PaymentApplyResponse["payment"][] }>(`/cases/${caseId}/payments`),
-  getDocumentTemplates: () => request<DocumentTemplate[]>("/document-templates"),
+  getDocumentTemplates: (includeArchived = false) =>
+    request<DocumentTemplate[]>(
+      `/document-templates${includeArchived ? "?includeArchived=true" : ""}`,
+    ),
+  getDocumentTemplate: (id: string) => request<DocumentTemplate>(`/document-templates/${id}`),
+  createDocumentTemplate: (payload: DocumentTemplateInput) =>
+    request<DocumentTemplate>("/document-templates", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  createDocumentTemplateVersion: (id: string, payload: DocumentTemplateInput) =>
+    request<DocumentTemplate>(`/document-templates/${id}/version`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  archiveDocumentTemplate: (id: string) =>
+    request<DocumentTemplate>(`/document-templates/${id}/archive`, { method: "POST" }),
+  getTenantDocumentSettings: () =>
+    request<TenantDocumentSettings | null>("/tenant-document-settings"),
+  saveTenantDocumentSettings: (payload: TenantDocumentSettingsInput) =>
+    request<TenantDocumentSettings>("/tenant-document-settings", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
   getDocuments: (caseId: string) => request<CaseDocument[]>(`/cases/${caseId}/documents`),
   previewDocument: (caseId: string, templateId: string) =>
-    request<{ subject: string; renderedBody: string; templateVersion: number }>(
-      `/cases/${caseId}/documents/preview`,
-      { method: "POST", body: JSON.stringify({ templateId }) },
-    ),
+    request<DocumentPreview>(`/cases/${caseId}/documents/preview`, {
+      method: "POST",
+      body: JSON.stringify({ templateId }),
+    }),
   generateDocument: (caseId: string, templateId: string) =>
     request<CaseDocument>(`/cases/${caseId}/documents/generate`, {
       method: "POST",

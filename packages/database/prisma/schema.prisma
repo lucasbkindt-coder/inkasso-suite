@@ -268,6 +268,7 @@ model Tenant {
   paymentAllocations PaymentAllocation[]
   documentTemplates  DocumentTemplate[]
   documents          CaseDocument[]
+  documentSettings   TenantDocumentSettings?
 
   @@index([deletedAt])
 }
@@ -409,6 +410,35 @@ model DocumentTemplate {
 
   @@unique([tenantId, key, version])
   @@index([tenantId, status, type])
+}
+
+model TenantDocumentSettings {
+  id                 String   @id @default(uuid()) @db.Uuid
+  tenantId           String   @unique @db.Uuid
+  companyName        String
+  legalName          String?
+  street             String
+  houseNumber        String?
+  postalCode         String
+  city               String
+  country            String   @default("DE") @db.Char(2)
+  phone              String?
+  mobile             String?
+  fax                String?
+  email              String?
+  website            String?
+  registrationCourt  String?
+  registrationNumber String?
+  vatId              String?
+  managingDirector   String?
+  iban               String?
+  bic                String?
+  bankName           String?
+  creditorId         String?
+  documentFooter     String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  tenant             Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
 }
 
 model CaseDocument {

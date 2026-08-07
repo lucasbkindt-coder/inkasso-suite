@@ -6,17 +6,48 @@ import {
   NotFoundException,
   Param,
   ParseUUIDPipe,
+  Patch,
   Post,
+  Query,
   Res,
 } from "@nestjs/common";
 import { DocumentRenderDto } from "./dto/document.dto";
+import { TenantDocumentSettingsDto } from "./dto/tenant-document-settings.dto";
+import { TemplateDto } from "./dto/template.dto";
 import { DocumentsService } from "./documents.service";
 
 @Controller()
 export class DocumentsController {
   constructor(private readonly documents: DocumentsService) {}
-  @Get("document-templates") templates() {
-    return this.documents.templates();
+  @Get("tenant-document-settings") settings() {
+    return this.documents.settings();
+  }
+  @Post("tenant-document-settings") saveSettings(@Body() dto: TenantDocumentSettingsDto) {
+    return this.documents.saveSettings(dto);
+  }
+  @Get("document-templates") templates(@Query("includeArchived") includeArchived?: string) {
+    return this.documents.templates(includeArchived === "true");
+  }
+  @Get("document-templates/:id") template(@Param("id", ParseUUIDPipe) id: string) {
+    return this.documents.templateById(id);
+  }
+  @Post("document-templates") createTemplate(@Body() dto: TemplateDto) {
+    return this.documents.createTemplate(dto);
+  }
+  @Post("document-templates/:id/archive") archiveTemplate(@Param("id", ParseUUIDPipe) id: string) {
+    return this.documents.archiveTemplate(id);
+  }
+  @Post("document-templates/:id/version") versionTemplate(
+    @Param("id", ParseUUIDPipe) id: string,
+    @Body() dto: TemplateDto,
+  ) {
+    return this.documents.newVersion(id, dto);
+  }
+  @Patch("document-templates/:id") updateTemplate(
+    @Param("id", ParseUUIDPipe) id: string,
+    @Body() dto: TemplateDto,
+  ) {
+    return this.documents.newVersion(id, dto);
   }
   @Get("cases/:caseId/documents") list(@Param("caseId", ParseUUIDPipe) id: string) {
     return this.documents.list(id);

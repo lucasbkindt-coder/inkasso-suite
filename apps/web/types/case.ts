@@ -201,10 +201,86 @@ export type CreateLedgerEntryInput = {
 
 export type DocumentTemplate = {
   id: string;
+  tenantId: string | null;
   key: string;
   name: string;
   type: string;
   version: number;
+  status: "ACTIVE" | "INACTIVE" | "ARCHIVED";
+  subject: string | null;
+  bodyTemplate: string;
+  createdAt: string;
+  updatedAt: string;
+};
+export type DocumentType =
+  | "PAYMENT_REQUEST"
+  | "SECOND_PAYMENT_REQUEST"
+  | "JUDICIAL_DUNNING_NOTICE"
+  | "ENFORCEMENT_NOTICE"
+  | "PAYMENT_PLAN"
+  | "CUSTOM";
+export type DocumentTemplateInput = {
+  name: string;
+  key: string;
+  type: DocumentType;
+  subject?: string;
+  bodyTemplate: string;
+};
+export type DocumentPreview = {
+  subject: string;
+  renderedBody: string;
+  templateVersion: number;
+  warnings?: string[];
+};
+export type TenantDocumentSettings = {
+  id: string;
+  tenantId: string;
+  companyName: string;
+  legalName: string | null;
+  street: string;
+  houseNumber: string | null;
+  postalCode: string;
+  city: string;
+  country: string;
+  phone: string | null;
+  mobile: string | null;
+  fax: string | null;
+  email: string | null;
+  website: string | null;
+  registrationCourt: string | null;
+  registrationNumber: string | null;
+  vatId: string | null;
+  managingDirector: string | null;
+  iban: string | null;
+  bic: string | null;
+  bankName: string | null;
+  creditorId: string | null;
+  documentFooter: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+export type TenantDocumentSettingsInput = {
+  companyName: string;
+  street: string;
+  postalCode: string;
+  city: string;
+  legalName?: string;
+  houseNumber?: string;
+  country?: string;
+  email?: string;
+  phone?: string;
+  mobile?: string;
+  fax?: string;
+  website?: string;
+  registrationCourt?: string;
+  registrationNumber?: string;
+  vatId?: string;
+  managingDirector?: string;
+  iban?: string;
+  bic?: string;
+  bankName?: string;
+  creditorId?: string;
+  documentFooter?: string;
 };
 export type CaseDocument = {
   id: string;
@@ -215,6 +291,7 @@ export type CaseDocument = {
   renderedSubject: string | null;
   generatedAt: string;
   template?: { name: string; key: string } | null;
+  voidedAt?: string | null;
 };
 
 export type RvgScenario =

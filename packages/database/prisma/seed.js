@@ -176,6 +176,19 @@ async function main() {
   await seedCase(tenant.id);
   await seedRvgReferenceData();
   await seedDocumentTemplates(tenant.id);
+  await prisma.tenantDocumentSettings.upsert({
+    where: { tenantId: tenant.id },
+    update: {},
+    create: {
+      tenantId: tenant.id,
+      companyName: "RisePay Entwicklungsumgebung",
+      street: "Entwicklungsstraße",
+      postalCode: "00000",
+      city: "Entwicklungsort",
+      country: "DE",
+      documentFooter: "Lokale Entwicklungsdaten – vor produktivem Versand konfigurieren.",
+    },
+  });
 }
 
 async function seedDocumentTemplates(tenantId) {

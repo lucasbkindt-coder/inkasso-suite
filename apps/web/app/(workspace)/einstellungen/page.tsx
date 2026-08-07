@@ -1,10 +1,11 @@
-import { PagePlaceholder } from "@/components/page-placeholder";
+import { DocumentSettings } from "@/components/settings/document-settings";
+import { TemplateManagement } from "@/components/settings/template-management";
 
 export default function SettingsPage() {
   return (
-    <PagePlaceholder
-      description="Allgemeine Einstellungen werden künftig an dieser Stelle bereitgestellt."
-      title="Einstellungen"
-    />
+    <div className="space-y-6">
+      <DocumentSettings />
+      <TemplateManagement />
+    </div>
   );
 }
