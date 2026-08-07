@@ -92,6 +92,29 @@ enum ClaimStatus {
   CANCELLED
 }
 
+enum LedgerEntrySide {
+  DEBIT
+  CREDIT
+}
+
+enum LedgerEntryType {
+  PRINCIPAL
+  INTEREST
+  COLLECTION_FEE
+  EXPENSE
+  COURT_COST
+  ENFORCEMENT_COST
+  PAYMENT
+  CREDIT_NOTE
+  CORRECTION
+  OTHER
+}
+
+enum LedgerEntryStatus {
+  ACTIVE
+  REVERSED
+}
+
 model User {
   id          String    @id @default(uuid()) @db.Uuid
   email       String    @unique
@@ -115,14 +138,15 @@ model Tenant {
   updatedAt DateTime  @updatedAt
   deletedAt DateTime?
 
-  memberships TenantMembership[]
-  teams       Team[]
-  roles       Role[]
-  debtors     Debtor[]
-  parties     Party[]
-  cases       Case[]
-  claims      Claim[]
-  sequences   CaseNumberSequence[]
+  memberships   TenantMembership[]
+  teams         Team[]
+  roles         Role[]
+  debtors       Debtor[]
+  parties       Party[]
+  cases         Case[]
+  claims        Claim[]
+  sequences     CaseNumberSequence[]
+  ledgerEntries CaseLedgerEntry[]
 
   @@index([deletedAt])
 }
@@ -150,6 +174,7 @@ model Case {
   debtorParty       Party             @relation("CaseDebtor", fields: [debtorPartyId], references: [id], onDelete: Restrict)
   ownerMembership   TenantMembership? @relation(fields: [ownerMembershipId], references: [id], onDelete: Restrict)
   claim             Claim?
+  ledgerEntries     CaseLedgerEntry[]
 
   @@unique([tenantId, caseNumber])
   @@unique([tenantId, sequenceYear, sequenceNumber])
@@ -158,6 +183,38 @@ model Case {
   @@index([clientPartyId])
   @@index([debtorPartyId])
   @@index([ownerMembershipId])
+}
+
+model CaseLedgerEntry {
+  id                    String            @id @default(uuid()) @db.Uuid
+  tenantId              String            @db.Uuid
+  caseId                String            @db.Uuid
+  side                  LedgerEntrySide
+  type                  LedgerEntryType
+  status                LedgerEntryStatus @default(ACTIVE)
+  amount                Decimal           @db.Decimal(15, 2)
+  currency              String            @default("EUR") @db.Char(3)
+  bookingDate           DateTime          @db.Date
+  valueDate             DateTime?         @db.Date
+  description           String
+  externalReference     String?
+  source                String?
+  reversedEntryId       String?           @unique @db.Uuid
+  createdByMembershipId String?           @db.Uuid
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @updatedAt
+
+  tenant              Tenant            @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  case                Case              @relation(fields: [caseId], references: [id], onDelete: Restrict)
+  reversedEntry       CaseLedgerEntry?  @relation("LedgerReversal", fields: [reversedEntryId], references: [id], onDelete: Restrict)
+  reversal            CaseLedgerEntry?  @relation("LedgerReversal")
+  createdByMembership TenantMembership? @relation(fields: [createdByMembershipId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId, caseId, bookingDate])
+  @@index([caseId, status])
+  @@index([type])
+  @@index([externalReference])
+  @@index([createdByMembershipId])
 }
 
 model Claim {
@@ -338,9 +395,10 @@ model TenantMembership {
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   user   User   @relation(fields: [userId], references: [id], onDelete: Restrict)
 
-  teamMemberships TeamMembership[]
-  roleAssignments MembershipRole[]
-  ownedCases      Case[]
+  teamMemberships      TeamMembership[]
+  roleAssignments      MembershipRole[]
+  ownedCases           Case[]
+  createdLedgerEntries CaseLedgerEntry[]
 
   @@unique([tenantId, userId])
   @@index([userId, deletedAt])

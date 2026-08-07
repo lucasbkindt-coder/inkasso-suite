@@ -1,6 +1,8 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import {
   MembershipStatus,
+  LedgerEntrySide,
+  LedgerEntryType,
   PartyRoleType,
   Prisma,
   type CasePhase,
@@ -126,6 +128,19 @@ export class CasesService {
               principalAmount,
               currency: dto.claim.currency.toUpperCase(),
               description: dto.claim.description,
+            },
+          },
+          ledgerEntries: {
+            create: {
+              tenantId,
+              side: LedgerEntrySide.DEBIT,
+              type: LedgerEntryType.PRINCIPAL,
+              amount: principalAmount,
+              currency: dto.claim.currency.toUpperCase(),
+              bookingDate: new Date(dto.claim.invoiceDate),
+              description: `Hauptforderung ${dto.claim.invoiceNumber.trim()}`,
+              source: "case-create",
+              createdByMembershipId: dto.ownerMembershipId,
             },
           },
         },

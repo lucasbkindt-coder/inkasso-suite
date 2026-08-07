@@ -39,7 +39,13 @@ export const priorityBadgeClasses: Record<CasePriority, string> = {
 };
 
 export function formatCurrency(value: string, currency: string) {
-  return new Intl.NumberFormat("de-DE", { style: "currency", currency }).format(Number(value));
+  const normalized = value.trim();
+  const negative = normalized.startsWith("-");
+  const [rawInteger = "0", rawFraction = ""] = normalized.replace(/^-/, "").split(".");
+  const integer = rawInteger.replace(/^0+(?=\d)/, "") || "0";
+  const grouped = integer.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+  const fraction = rawFraction.padEnd(2, "0").slice(0, 2);
+  return `${negative ? "-" : ""}${grouped},${fraction}\u00a0${currency}`;
 }
 
 export function formatDate(value: string | null | undefined) {

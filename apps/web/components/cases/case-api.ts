@@ -1,4 +1,12 @@
-import type { Case, CasesResponse, CreateCaseInput, UpdateCaseInput } from "@/types/case";
+import type {
+  Case,
+  CasesResponse,
+  CreateCaseInput,
+  CreateLedgerEntryInput,
+  LedgerEntry,
+  LedgerResponse,
+  UpdateCaseInput,
+} from "@/types/case";
 
 const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
 
@@ -65,6 +73,14 @@ export const caseApi = {
   restoreCase: (id: string) => request<Case>(`/cases/${id}/restore`, { method: "POST" }),
   getParties: (role: "CLIENT" | "DEBTOR", search?: string) =>
     request<PartiesResponse>(`/parties?${queryString({ role, search, limit: 100 })}`),
+  getLedger: (caseId: string) => request<LedgerResponse>(`/cases/${caseId}/ledger`),
+  createLedgerEntry: (caseId: string, payload: CreateLedgerEntryInput) =>
+    request<LedgerEntry>(`/cases/${caseId}/ledger`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  reverseLedgerEntry: (caseId: string, entryId: string) =>
+    request<LedgerEntry>(`/cases/${caseId}/ledger/${entryId}/reverse`, { method: "POST" }),
 };
 
 export type { PartyOption };

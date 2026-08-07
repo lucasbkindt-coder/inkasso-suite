@@ -116,3 +116,46 @@ export type UpdateCaseInput = Partial<
   ownerMembershipId?: string;
   claim?: Partial<Omit<CreateCaseInput["claim"], "defaultDate">> & { defaultDate?: string };
 };
+
+export type LedgerEntrySide = "DEBIT" | "CREDIT";
+export type LedgerEntryType =
+  | "PRINCIPAL"
+  | "INTEREST"
+  | "COLLECTION_FEE"
+  | "EXPENSE"
+  | "COURT_COST"
+  | "ENFORCEMENT_COST"
+  | "PAYMENT"
+  | "CREDIT_NOTE"
+  | "CORRECTION"
+  | "OTHER";
+
+export type LedgerEntry = {
+  id: string;
+  side: LedgerEntrySide;
+  type: LedgerEntryType;
+  status: "ACTIVE" | "REVERSED";
+  amount: string;
+  currency: string;
+  bookingDate: string;
+  valueDate: string | null;
+  description: string;
+  externalReference: string | null;
+  source: string | null;
+  reversedEntryId: string | null;
+};
+
+export type LedgerResponse = {
+  items: LedgerEntry[];
+  totals: { totalDebit: string; totalCredit: string; balance: string };
+};
+
+export type CreateLedgerEntryInput = {
+  type: Exclude<LedgerEntryType, "PRINCIPAL">;
+  side?: LedgerEntrySide;
+  amount: string;
+  currency?: string;
+  bookingDate: string;
+  valueDate?: string;
+  description: string;
+};

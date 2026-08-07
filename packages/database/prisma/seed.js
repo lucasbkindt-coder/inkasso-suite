@@ -5,6 +5,9 @@ const {
   CaseStatus,
   ClaimStatus,
   ContactType,
+  LedgerEntrySide,
+  LedgerEntryStatus,
+  LedgerEntryType,
   MembershipStatus,
   PartyRoleType,
   PartyType,
@@ -150,7 +153,7 @@ async function seedCase(tenantId) {
     update: {},
     create: { tenantId, year: 2026, lastNumber: 1 },
   });
-  await prisma.case.upsert({
+  const seededCase = await prisma.case.upsert({
     where: { tenantId_caseNumber: { tenantId, caseNumber: "0000001/2026" } },
     update: {
       status: CaseStatus.OPEN,
@@ -209,6 +212,29 @@ async function seedCase(tenantId) {
       },
     },
   });
+  const principal = await prisma.caseLedgerEntry.findFirst({
+    where: {
+      caseId: seededCase.id,
+      type: LedgerEntryType.PRINCIPAL,
+      side: LedgerEntrySide.DEBIT,
+      source: "seed",
+    },
+  });
+  const principalData = {
+    tenantId,
+    caseId: seededCase.id,
+    side: LedgerEntrySide.DEBIT,
+    type: LedgerEntryType.PRINCIPAL,
+    status: LedgerEntryStatus.ACTIVE,
+    amount: "1248.53",
+    currency: "EUR",
+    bookingDate: new Date("2026-01-15"),
+    description: "Hauptforderung RE-2026-1001",
+    source: "seed",
+  };
+  if (principal)
+    await prisma.caseLedgerEntry.update({ where: { id: principal.id }, data: principalData });
+  else await prisma.caseLedgerEntry.create({ data: principalData });
 }
 
 async function seedPartyMasterData(tenantId) {

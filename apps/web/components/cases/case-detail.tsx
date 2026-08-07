@@ -9,7 +9,7 @@ import { caseApi } from "./case-api";
 import { CaseDocuments } from "./case-documents";
 import { CaseHeader } from "./case-header";
 import { CaseOverview } from "./case-overview";
-import { CasePayments } from "./case-payments";
+import { CaseLedger } from "./case-ledger";
 import { CaseTabs } from "./case-tabs";
 import { CaseTimeline } from "./case-timeline";
 
@@ -51,7 +51,7 @@ export function CaseDetail() {
           <CaseTabs />
           <CaseOverview caseRecord={caseRecord} />
           <CaseDocuments />
-          <CasePayments />
+          <CaseLedger caseId={caseRecord.id} />
         </div>
         <CaseTimeline />
       </div>
