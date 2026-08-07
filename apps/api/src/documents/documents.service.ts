@@ -6,6 +6,7 @@ import { DocumentRenderDto } from "./dto/document.dto";
 import { LocalDocumentStorage } from "./local-document-storage";
 import { TenantDocumentSettingsDto } from "./dto/tenant-document-settings.dto";
 import { TemplateDto } from "./dto/template.dto";
+import { renderDin5008Document } from "./din5008-layout";
 
 @Injectable()
 export class DocumentsService {
@@ -127,7 +128,7 @@ export class DocumentsService {
   async generate(caseId: string, dto: DocumentRenderDto) {
     const preview = await this.preview(caseId, dto);
     const tenantId = await this.tenant.getTenantId();
-    const pdf = this.pdf(preview.subject, preview.renderedBody, preview.dataSnapshot);
+    const pdf = await renderDin5008Document(preview.subject, preview.renderedBody, preview.dataSnapshot);
     const storageKey = await this.storage.save(pdf);
     const filename = `RisePay-${String((preview.dataSnapshot as { case: { caseNumber: string } }).case.caseNumber).replace(/\//g, "-")}-${Date.now()}.pdf`;
     try {
@@ -143,7 +144,7 @@ export class DocumentsService {
           templateVersion: preview.templateVersion,
           renderedSubject: preview.subject,
           renderedBody: preview.renderedBody,
-          dataSnapshot: preview.dataSnapshot as Prisma.InputJsonValue,
+          dataSnapshot: { ...preview.dataSnapshot, layoutVersion: "DIN5008_2020_FORM_B_V1" } as Prisma.InputJsonValue,
         },
       });
     } catch (error) {
@@ -228,14 +229,17 @@ export class DocumentsService {
         )
         .toFixed(2);
     const address = (party: typeof data.clientParty) =>
-      party.addresses[0] ?? { street: "", postalCode: "", city: "" };
+      party.addresses[0] ?? { street: "", houseNumber: "", postalCode: "", city: "", country: "" };
+    const debtorAddress = address(data.debtorParty);
+    if (!debtorAddress.street || !debtorAddress.postalCode || !debtorAddress.city)
+      throw new BadRequestException("Für diese Akte ist keine vollständige primäre Schuldneranschrift hinterlegt.");
     const openPrincipal = open(["PRINCIPAL"]);
     const openInterest = open(["INTEREST"]);
     const openCosts = open(["COLLECTION_FEE", "EXPENSE", "COURT_COST", "ENFORCEMENT_COST"]);
     return {
       case: { caseNumber: data.caseNumber },
       client: { displayName: data.clientParty.displayName, address: address(data.clientParty) },
-      debtor: { displayName: data.debtorParty.displayName, address: address(data.debtorParty) },
+      debtor: { displayName: data.debtorParty.displayName, address: debtorAddress },
       claim: {
         invoiceNumber: claim.invoiceNumber,
         invoiceDate: this.date(claim.invoiceDate),
@@ -333,59 +337,5 @@ export class DocumentsService {
   }
   private date(value: Date) {
     return new Intl.DateTimeFormat("de-DE").format(value);
-  }
-  private pdf(subject: string, body: string, snapshot: Record<string, unknown>) {
-    const lines = [
-      `${(snapshot.company as { name: string }).name}`,
-      "Forderungsmanagement",
-      "",
-      `${(snapshot.debtor as { displayName: string }).displayName}`,
-      "",
-      `Datum: ${snapshot.today as string}`,
-      `Aktenzeichen: ${(snapshot.case as { caseNumber: string }).caseNumber}`,
-      "",
-      subject,
-      "",
-      ...body.split("\n"),
-      "",
-      `Hauptforderung: ${(snapshot.ledger as { openPrincipal: string }).openPrincipal} EUR`,
-      `Kosten: ${(snapshot.ledger as { openCosts: string }).openCosts} EUR`,
-      `Zinsen: ${(snapshot.ledger as { openInterest: string }).openInterest} EUR`,
-      `Offen gesamt: ${(snapshot.ledger as { openTotal: string }).openTotal} EUR`,
-      ...(snapshot.company && (snapshot.company as { iban: string }).iban
-        ? [
-            "",
-            `Zahlungsempfänger: ${(snapshot.company as { name: string }).name}`,
-            `IBAN: ${(snapshot.company as { iban: string }).iban}`,
-            `BIC: ${(snapshot.company as { bic: string }).bic}`,
-            `Verwendungszweck: ${(snapshot.case as { caseNumber: string }).caseNumber}`,
-          ]
-        : []),
-    ];
-    const content = lines
-      .map(
-        (line, index) =>
-          `BT /F1 ${index === 0 ? 18 : 11} Tf 50 ${790 - index * 18} Td (${line.replace(/[()\\]/g, "\\$&")}) Tj ET`,
-      )
-      .join("\n");
-    const objects = [
-      "<< /Type /Catalog /Pages 2 0 R >>",
-      "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
-      "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>",
-      "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
-      `<< /Length ${Buffer.byteLength(content)} >>\nstream\n${content}\nendstream`,
-    ];
-    let pdf = "%PDF-1.4\n";
-    const offsets = [0];
-    objects.forEach((object, index) => {
-      offsets.push(Buffer.byteLength(pdf));
-      pdf += `${index + 1} 0 obj\n${object}\nendobj\n`;
-    });
-    const start = Buffer.byteLength(pdf);
-    pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n${offsets
-      .slice(1)
-      .map((offset) => `${String(offset).padStart(10, "0")} 00000 n \n`)
-      .join("")}trailer << /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${start}\n%%EOF`;
-    return Buffer.from(pdf);
   }
 }

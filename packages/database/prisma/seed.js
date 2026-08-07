@@ -15,6 +15,9 @@ const {
   PrismaClient,
   RoleKind,
   RvgFeeScheduleStatus,
+  TaskPriority,
+  TaskStatus,
+  TaskType,
 } = require("@prisma/client");
 
 const rvg2025Tiers = [
@@ -173,7 +176,8 @@ async function main() {
   });
 
   await seedPartyMasterData(tenant.id);
-  await seedCase(tenant.id);
+  const seededCase = await seedCase(tenant.id);
+  await seedCaseTasks(tenant.id, seededCase.id);
   await seedRvgReferenceData();
   await seedDocumentTemplates(tenant.id);
   await prisma.tenantDocumentSettings.upsert({
@@ -368,6 +372,20 @@ async function seedCase(tenantId) {
   if (principal)
     await prisma.caseLedgerEntry.update({ where: { id: principal.id }, data: principalData });
   else await prisma.caseLedgerEntry.create({ data: principalData });
+  return seededCase;
+}
+
+async function seedCaseTasks(tenantId, caseId) {
+  const tasks = [
+    ["Schuldner telefonisch kontaktieren", TaskType.FOLLOW_UP, TaskPriority.NORMAL, new Date("2026-08-12T09:00:00.000Z"), new Date("2026-08-12T09:00:00.000Z")],
+    ["Zahlungsfrist prüfen", TaskType.DEADLINE, TaskPriority.HIGH, new Date("2026-08-15T12:00:00.000Z"), null],
+  ];
+  for (const [title, type, priority, dueAt, followUpAt] of tasks) {
+    const existing = await prisma.caseTask.findFirst({ where: { tenantId, caseId, title } });
+    const data = { tenantId, caseId, title, type, priority, status: TaskStatus.OPEN, dueAt, followUpAt, completedAt: null, cancelledAt: null };
+    if (existing) await prisma.caseTask.update({ where: { id: existing.id }, data });
+    else await prisma.caseTask.create({ data });
+  }
 }
 
 async function seedPartyMasterData(tenantId) {

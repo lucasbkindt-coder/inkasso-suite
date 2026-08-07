@@ -17,6 +17,7 @@ import type {
   RvgCostInput,
   UpdateCaseInput,
 } from "@/types/case";
+import type { CaseTask, CreateTaskInput, TasksResponse, UpdateTaskInput } from "@/types/task";
 
 const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
 
@@ -39,6 +40,7 @@ export type CasesQuery = {
   debtorPartyId?: string;
   deleted?: boolean;
 };
+export type TasksQuery = { caseId?: string; status?: string; page?: number; pageSize?: number };
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${apiUrl}${path}`, {
@@ -110,6 +112,15 @@ export const caseApi = {
     request<Case>(`/cases/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
   deleteCase: (id: string) => request<void>(`/cases/${id}`, { method: "DELETE" }),
   restoreCase: (id: string) => request<Case>(`/cases/${id}/restore`, { method: "POST" }),
+  getTasks: (query: TasksQuery = {}) => {
+    const suffix = queryString(query);
+    return request<TasksResponse>(`/tasks${suffix ? `?${suffix}` : ""}`);
+  },
+  createTask: (payload: CreateTaskInput) => request<CaseTask>("/tasks", { method: "POST", body: JSON.stringify(payload) }),
+  updateTask: (id: string, payload: UpdateTaskInput) => request<CaseTask>(`/tasks/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
+  completeTask: (id: string) => request<CaseTask>(`/tasks/${id}/complete`, { method: "POST" }),
+  reopenTask: (id: string) => request<CaseTask>(`/tasks/${id}/reopen`, { method: "POST" }),
+  cancelTask: (id: string) => request<CaseTask>(`/tasks/${id}/cancel`, { method: "POST" }),
   getParties: (role: "CLIENT" | "DEBTOR", search?: string) =>
     request<PartiesResponse>(`/parties?${queryString({ role, search, limit: 100 })}`),
   getLedger,

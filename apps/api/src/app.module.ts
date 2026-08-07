@@ -8,6 +8,7 @@ import { LedgerModule } from "./ledger/ledger.module";
 import { LegalReferencesModule } from "./legal-references/legal-references.module";
 import { PartiesModule } from "./parties/parties.module";
 import { DocumentsModule } from "./documents/documents.module";
+import { TasksModule } from "./tasks/tasks.module";
 
 @Module({
   imports: [
@@ -19,6 +20,7 @@ import { DocumentsModule } from "./documents/documents.module";
     LegalReferencesModule,
     CostsModule,
     DocumentsModule,
+    TasksModule,
   ],
 })
 export class AppModule {}

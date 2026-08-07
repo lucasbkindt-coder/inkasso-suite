@@ -12,6 +12,7 @@ import { CaseOverview } from "./case-overview";
 import { CaseLedger } from "./case-ledger";
 import { CaseTabs } from "./case-tabs";
 import { CaseTimeline } from "./case-timeline";
+import { CaseTasks } from "./case-tasks";
 
 export function CaseDetail() {
   const params = useParams<{ id: string }>();
@@ -50,6 +51,7 @@ export function CaseDetail() {
         <div className="space-y-6">
           <CaseTabs />
           <CaseOverview caseRecord={caseRecord} />
+          <CaseTasks caseId={caseRecord.id} />
           <CaseDocuments caseId={caseRecord.id} />
           <CaseLedger caseId={caseRecord.id} />
         </div>

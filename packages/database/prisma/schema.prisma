@@ -170,6 +170,26 @@ enum CaseCostCalculationStatus {
   REVERSED
 }
 
+enum TaskType {
+  TASK
+  DEADLINE
+  FOLLOW_UP
+}
+
+enum TaskStatus {
+  OPEN
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum TaskPriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
 model User {
   id          String    @id @default(uuid()) @db.Uuid
   email       String    @unique
@@ -269,6 +289,7 @@ model Tenant {
   documentTemplates  DocumentTemplate[]
   documents          CaseDocument[]
   documentSettings   TenantDocumentSettings?
+  tasks              CaseTask[]
 
   @@index([deletedAt])
 }
@@ -300,6 +321,7 @@ model Case {
   costCalculations   CaseCostCalculation[]
   paymentAllocations PaymentAllocation[]
   documents          CaseDocument[]
+  tasks              CaseTask[]
 
   @@unique([tenantId, caseNumber])
   @@unique([tenantId, sequenceYear, sequenceNumber])
@@ -470,6 +492,35 @@ model CaseDocument {
   @@index([tenantId, caseId, generatedAt])
   @@index([templateId])
   @@index([createdByMembershipId])
+}
+
+model CaseTask {
+  id                    String       @id @default(uuid()) @db.Uuid
+  tenantId              String       @db.Uuid
+  caseId                String?      @db.Uuid
+  type                  TaskType
+  status                TaskStatus   @default(OPEN)
+  priority              TaskPriority @default(NORMAL)
+  title                 String
+  description           String?
+  dueAt                 DateTime?
+  followUpAt            DateTime?
+  assignedMembershipId  String?      @db.Uuid
+  createdByMembershipId String?      @db.Uuid
+  completedAt           DateTime?
+  cancelledAt           DateTime?
+  createdAt             DateTime     @default(now())
+  updatedAt             DateTime     @updatedAt
+
+  tenant              Tenant            @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  case                Case?             @relation(fields: [caseId], references: [id], onDelete: Restrict)
+  assignedMembership  TenantMembership? @relation("AssignedTasks", fields: [assignedMembershipId], references: [id], onDelete: Restrict)
+  createdByMembership TenantMembership? @relation("CreatedTasks", fields: [createdByMembershipId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId, status, dueAt])
+  @@index([tenantId, assignedMembershipId, status])
+  @@index([tenantId, caseId, status])
+  @@index([tenantId, followUpAt])
 }
 
 model Claim {
@@ -655,6 +706,8 @@ model TenantMembership {
   ownedCases           Case[]
   createdLedgerEntries CaseLedgerEntry[]
   createdDocuments     CaseDocument[]
+  assignedTasks        CaseTask[]          @relation("AssignedTasks")
+  createdTasks         CaseTask[]          @relation("CreatedTasks")
 
   @@unique([tenantId, userId])
   @@index([userId, deletedAt])
