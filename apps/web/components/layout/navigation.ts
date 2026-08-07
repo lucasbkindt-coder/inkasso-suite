@@ -1,21 +1,17 @@
 import {
   Building2,
-  Files,
   FolderKanban,
   LayoutDashboard,
   Settings,
   ShieldCheck,
   Users,
   UsersRound,
-  WalletCards,
 } from "lucide-react";
 
 export const navigationGroups = [
   {
     label: "Übersicht",
-    items: [
-      { href: "/", label: "Dashboard", icon: LayoutDashboard },
-    ],
+    items: [{ href: "/", label: "Dashboard", icon: LayoutDashboard }],
   },
   {
     label: "Forderungsmanagement",
@@ -23,8 +19,6 @@ export const navigationGroups = [
       { href: "/akten", label: "Inkassoakten", icon: FolderKanban },
       { href: "/parteien", label: "Parteien", icon: UsersRound },
       { href: "/schuldner", label: "Schuldner", icon: Users },
-      { href: "/zahlungen", label: "Zahlungen", icon: WalletCards },
-      { href: "/dokumente", label: "Dokumente", icon: Files },
     ],
   },
   {
@@ -40,7 +34,7 @@ export const navigationGroups = [
 ] as const;
 
 export const pageTitles: Record<string, string> = {
-  "/": "Übersicht",
+  "/": "Dashboard",
   "/akten": "Inkassoakten",
   "/schuldner": "Schuldner",
   "/parteien": "Parteien",
@@ -52,3 +46,15 @@ export const pageTitles: Record<string, string> = {
   "/rollen": "Rollen",
   "/einstellungen": "Einstellungen",
 };
+
+export function isNavigationItemActive(pathname: string, href: string) {
+  return href === "/" ? pathname === href : pathname === href || pathname.startsWith(`${href}/`);
+}
+
+export function resolvePageTitle(pathname: string) {
+  if (pathname === "/") return pageTitles["/"];
+  if (pathname.startsWith("/akten/")) return "Inkassoakte";
+  if (pathname.startsWith("/parteien/")) return "Partei";
+  if (pathname.startsWith("/schuldner/")) return "Schuldner";
+  return pageTitles[pathname] ?? "Arbeitsbereich";
+}

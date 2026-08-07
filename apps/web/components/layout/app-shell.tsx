@@ -9,7 +9,7 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
-import { navigationGroups, pageTitles } from "./navigation";
+import { isNavigationItemActive, navigationGroups, resolvePageTitle } from "./navigation";
 
 function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
@@ -34,7 +34,7 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
             </p>
             <div className="space-y-1">
               {group.items.map((item) => {
-                const isActive = pathname === item.href;
+                const isActive = isNavigationItemActive(pathname, item.href);
                 const Icon = item.icon;
 
                 return (
@@ -77,7 +77,7 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
 export function AppShell({ children }: { children: React.ReactNode }) {
   const [isMobileNavigationOpen, setMobileNavigationOpen] = React.useState(false);
   const pathname = usePathname();
-  const title = pageTitles[pathname] ?? "Arbeitsbereich";
+  const title = resolvePageTitle(pathname);
 
   return (
     <div className="min-h-screen bg-background">

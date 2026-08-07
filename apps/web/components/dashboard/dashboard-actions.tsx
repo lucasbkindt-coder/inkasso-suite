@@ -1,11 +1,9 @@
-import { FilePlus2, FolderPlus, Receipt, Users } from "lucide-react";
+import { FolderPlus, Users } from "lucide-react";
 import Link from "next/link";
 
 const actions = [
   { title: "Neue Akte", href: "/akten", icon: FolderPlus },
   { title: "Schuldner anlegen", href: "/schuldner", icon: Users },
-  { title: "Zahlung erfassen", href: "/zahlungen", icon: Receipt },
-  { title: "Dokument erstellen", href: "/dokumente", icon: FilePlus2 },
 ];
 
 export function DashboardActions() {
