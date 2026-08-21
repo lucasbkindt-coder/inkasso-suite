@@ -2,6 +2,7 @@ import {
   Building2,
   FolderKanban,
   LayoutDashboard,
+  ListTodo,
   Settings,
   ShieldCheck,
   Users,
@@ -22,6 +23,10 @@ export const navigationGroups = [
     ],
   },
   {
+    label: "Arbeitsorganisation",
+    items: [{ href: "/aufgaben", label: "Aufgaben & Fristen", icon: ListTodo }],
+  },
+  {
     label: "Administration",
     items: [
       { href: "/mandanten", label: "Mandanten", icon: Building2 },
@@ -38,6 +43,7 @@ export const pageTitles: Record<string, string> = {
   "/akten": "Inkassoakten",
   "/schuldner": "Schuldner",
   "/parteien": "Parteien",
+  "/aufgaben": "Aufgaben & Fristen",
   "/mandanten": "Mandanten",
   "/zahlungen": "Zahlungen",
   "/dokumente": "Dokumente",

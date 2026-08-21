@@ -6,7 +6,8 @@ import * as React from "react";
 import { PartyDialog } from "@/components/parties/party-dialog";
 import { type PartyDetail } from "@/components/parties/party-api";
 import { Button } from "@/components/ui/button";
-const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
+import { PortalPreviewButton } from "@/components/portal/portal-preview-button";
+const API = process.env.NEXT_PUBLIC_API_URL ?? "/api";
 type Party = {
   displayName: string;
   type: string;
@@ -93,6 +94,8 @@ export default function PartyDetailPage() {
           <Button onClick={() => setEditOpen(true)} variant="outline">
             <Pencil className="size-4" /> Bearbeiten
           </Button>
+          {party.roles.some((role) => role.role === "CLIENT") ? <PortalPreviewButton id={id} kind="client" label="Mandantenportal öffnen" /> : null}
+          {party.roles.some((role) => role.role === "DEBTOR") ? <PortalPreviewButton id={id} kind="debtor" label="Schuldnerportal öffnen" /> : null}
         </div>
       </header>
       <div className="grid gap-6 xl:grid-cols-2">

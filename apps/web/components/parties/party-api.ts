@@ -34,7 +34,7 @@ export type PartyDetail = PartyInput & {
   updatedAt: string;
   deletedAt: string | null;
 };
-const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
+const API = process.env.NEXT_PUBLIC_API_URL ?? "/api";
 async function request<T>(path: string, init?: RequestInit) {
   const response = await fetch(`${API}${path}`, {
     headers: { "Content-Type": "application/json", ...init?.headers },

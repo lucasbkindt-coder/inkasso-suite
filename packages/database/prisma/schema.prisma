@@ -141,6 +141,13 @@ enum DocumentStatus {
   VOIDED
 }
 
+enum PortalVisibility {
+  INTERNAL
+  CLIENT
+  DEBTOR
+  BOTH
+}
+
 enum TemplateStatus {
   ACTIVE
   INACTIVE
@@ -470,6 +477,7 @@ model CaseDocument {
   templateId            String?        @db.Uuid
   type                  DocumentType
   status                DocumentStatus @default(DRAFT)
+  portalVisibility      PortalVisibility @default(INTERNAL)
   filename              String
   mimeType              String         @default("application/pdf")
   storageKey            String

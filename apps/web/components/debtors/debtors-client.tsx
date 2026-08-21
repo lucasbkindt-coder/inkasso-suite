@@ -29,7 +29,7 @@ type ApiResult = {
   items: Debtor[];
   meta: { page: number; limit: number; total: number; totalPages: number };
 };
-const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
+const API = process.env.NEXT_PUBLIC_API_URL ?? "/api";
 const schema = z
   .object({
     type: z.enum(["PERSON", "COMPANY"]),

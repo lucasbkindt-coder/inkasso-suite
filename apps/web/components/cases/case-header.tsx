@@ -1,5 +1,6 @@
 import { ArrowLeft, Building2, CalendarDays, CircleDollarSign, User } from "lucide-react";
 import Link from "next/link";
+import { PortalPreviewButton } from "@/components/portal/portal-preview-button";
 
 import type { Case } from "@/types/case";
 
@@ -35,6 +36,7 @@ export function CaseHeader({ caseRecord }: { caseRecord: Case }) {
           <p className="mt-2 text-lg text-muted-foreground">{caseRecord.debtorParty.displayName}</p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <PortalPreviewButton id={caseRecord.id} kind="debtor-case" label="Schuldnerportal öffnen" />
           <Badge className={statusBadgeClasses[caseRecord.status]}>
             {caseStatusLabels[caseRecord.status]}
           </Badge>

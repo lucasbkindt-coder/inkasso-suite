@@ -6,7 +6,7 @@ import { Plus, Search, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PartyDialog } from "./party-dialog";
 
-const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
+const API = process.env.NEXT_PUBLIC_API_URL ?? "/api";
 type Party = {
   id: string;
   type: "PERSON" | "COMPANY";

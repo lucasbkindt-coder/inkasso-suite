@@ -17,6 +17,12 @@ export type CaseTask = {
   cancelledAt: string | null;
   createdAt: string;
   updatedAt: string;
+  case?: {
+    id: string;
+    caseNumber: string;
+    clientParty?: { displayName: string } | null;
+    debtorParty?: { displayName: string } | null;
+  } | null;
   assignedMembership?: { id: string; user: { displayName: string | null; email: string } } | null;
 };
 

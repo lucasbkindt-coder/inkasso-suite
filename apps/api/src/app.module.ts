@@ -9,6 +9,9 @@ import { LegalReferencesModule } from "./legal-references/legal-references.modul
 import { PartiesModule } from "./parties/parties.module";
 import { DocumentsModule } from "./documents/documents.module";
 import { TasksModule } from "./tasks/tasks.module";
+import { DashboardModule } from "./dashboard/dashboard.module";
+import { PortalPreviewModule } from "./portal-preview/portal-preview.module";
+import { PortalModule } from "./portal/portal.module";
 
 @Module({
   imports: [
@@ -21,6 +24,9 @@ import { TasksModule } from "./tasks/tasks.module";
     CostsModule,
     DocumentsModule,
     TasksModule,
+    DashboardModule,
+    PortalPreviewModule,
+    PortalModule,
   ],
 })
 export class AppModule {}

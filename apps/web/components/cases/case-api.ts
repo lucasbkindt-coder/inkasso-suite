@@ -18,8 +18,9 @@ import type {
   UpdateCaseInput,
 } from "@/types/case";
 import type { CaseTask, CreateTaskInput, TasksResponse, UpdateTaskInput } from "@/types/task";
+import type { DashboardSummary } from "@/types/dashboard";
 
-const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
+const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "/api";
 
 type PartyOption = {
   id: string;
@@ -40,7 +41,21 @@ export type CasesQuery = {
   debtorPartyId?: string;
   deleted?: boolean;
 };
-export type TasksQuery = { caseId?: string; status?: string; page?: number; pageSize?: number };
+export type TasksQuery = {
+  caseId?: string;
+  status?: string;
+  type?: string;
+  priority?: string;
+  assignedMembershipId?: string;
+  search?: string;
+  dueFrom?: string;
+  dueTo?: string;
+  overdue?: boolean;
+  today?: boolean;
+  upcoming?: boolean;
+  page?: number;
+  pageSize?: number;
+};
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${apiUrl}${path}`, {
@@ -99,6 +114,7 @@ function queryString(query: Record<string, string | number | boolean | undefined
 }
 
 export const caseApi = {
+  getDashboardSummary: () => request<DashboardSummary>("/dashboard/summary"),
   getCases: (query: CasesQuery = {}) => {
     const suffix = queryString(query);
     return request<CasesResponse>(`/cases${suffix ? `?${suffix}` : ""}`);
