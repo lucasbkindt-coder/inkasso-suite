@@ -21,7 +21,7 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
           <Scale className="size-4" />
         </div>
         <div>
-          <p className="text-sm font-semibold tracking-tight">RisePay</p>
+          <p className="text-sm font-semibold tracking-tight">payveo</p>
           <p className="text-xs text-muted-foreground">Arbeitsbereich</p>
         </div>
       </div>
@@ -65,8 +65,8 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
             IS
           </div>
           <div className="min-w-0">
-            <p className="truncate text-sm font-medium">RisePay</p>
-            <p className="truncate text-xs text-muted-foreground">Mandantenbereich</p>
+            <p className="truncate text-sm font-medium">payveo</p>
+            <p className="truncate text-xs text-muted-foreground">Arbeitsbereich</p>
           </div>
         </div>
       </div>
@@ -122,7 +122,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <Menu className="size-5" />
             </Button>
             <div>
-              <p className="text-xs text-muted-foreground">RisePay</p>
+              <p className="text-xs text-muted-foreground">payveo</p>
               <h1 className="text-base font-semibold tracking-tight">{title}</h1>
             </div>
           </div>

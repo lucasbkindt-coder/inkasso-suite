@@ -18,7 +18,7 @@ async function bootstrap() {
         return;
       }
 
-      callback(new Error("CORS origin is not allowed."), false);
+      callback(null, false);
     },
   });
   app.useGlobalPipes(

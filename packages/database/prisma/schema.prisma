@@ -35,6 +35,25 @@ enum PartyType {
   COMPANY
 }
 
+enum ClientSubmissionStatus {
+  SUBMITTED
+  UNDER_REVIEW
+  ACCEPTED
+  REJECTED
+}
+
+enum PortalAccountType {
+  CLIENT
+  DEBTOR
+}
+
+enum PortalAccountStatus {
+  PENDING_ACTIVATION
+  ACTIVE
+  LOCKED
+  DISABLED
+}
+
 enum PartyRoleType {
   CLIENT
   DEBTOR
@@ -297,6 +316,8 @@ model Tenant {
   documents          CaseDocument[]
   documentSettings   TenantDocumentSettings?
   tasks              CaseTask[]
+  clientSubmissions ClientSubmission[]
+  portalAccounts     PortalAccount[]
 
   @@index([deletedAt])
 }
@@ -329,6 +350,7 @@ model Case {
   paymentAllocations PaymentAllocation[]
   documents          CaseDocument[]
   tasks              CaseTask[]
+  acceptedSubmissions ClientSubmission[] @relation("AcceptedSubmissionCase")
 
   @@unique([tenantId, caseNumber])
   @@unique([tenantId, sequenceYear, sequenceNumber])
@@ -531,6 +553,53 @@ model CaseTask {
   @@index([tenantId, followUpAt])
 }
 
+model ClientSubmission {
+  id String @id @default(uuid()) @db.Uuid
+  tenantId String @db.Uuid
+  clientPartyId String @db.Uuid
+  status ClientSubmissionStatus @default(SUBMITTED)
+  reference String?
+  debtorType PartyType
+  debtorFirstName String?
+  debtorLastName String?
+  debtorCompanyName String?
+  debtorStreet String
+  debtorHouseNumber String?
+  debtorPostalCode String
+  debtorCity String
+  debtorCountry String @default("DE") @db.Char(2)
+  debtorEmail String?
+  debtorPhone String?
+  invoiceNumber String?
+  invoiceDate DateTime? @db.Date
+  dueDate DateTime @db.Date
+  principalAmount Decimal @db.Decimal(15, 2)
+  currency String @default("EUR") @db.Char(3)
+  claimDescription String?
+  clientNote String?
+  submittedAt DateTime @default(now())
+  reviewedAt DateTime?
+  acceptedAt DateTime?
+  rejectedAt DateTime?
+  acceptedCaseId String? @unique @db.Uuid
+  reviewedByMembershipId String? @db.Uuid
+  rejectionReason String?
+  strongMatchOverride Boolean @default(false)
+  strongMatchCandidateIds Json?
+  strongMatchOverrideReason String?
+  strongMatchOverrideAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  tenant Tenant @relation(fields:[tenantId], references:[id], onDelete:Restrict)
+  clientParty Party @relation(fields:[clientPartyId], references:[id], onDelete:Restrict)
+  acceptedCase Case? @relation("AcceptedSubmissionCase", fields:[acceptedCaseId], references:[id], onDelete:Restrict)
+  reviewedByMembership TenantMembership? @relation(fields:[reviewedByMembershipId], references:[id], onDelete:Restrict)
+  @@index([tenantId,status])
+  @@index([tenantId,clientPartyId])
+  @@index([submittedAt])
+  @@index([acceptedCaseId])
+}
+
 model Claim {
   id              String      @id @default(uuid()) @db.Uuid
   caseId          String      @unique @db.Uuid
@@ -580,9 +649,64 @@ model Party {
   contacts    Contact[]
   clientCases Case[]      @relation("CaseClient")
   debtorCases Case[]      @relation("CaseDebtor")
+  clientSubmissions ClientSubmission[]
+  portalAccounts     PortalAccount[]
 
   @@index([tenantId, deletedAt, displayName])
   @@index([tenantId, type, deletedAt])
+}
+
+model PortalAccount {
+  id              String              @id @default(uuid()) @db.Uuid
+  tenantId        String              @db.Uuid
+  partyId         String              @db.Uuid
+  portalType      PortalAccountType
+  status          PortalAccountStatus @default(PENDING_ACTIVATION)
+  loginIdentifier String              @unique
+  passwordHash    String?
+  activatedAt     DateTime?
+  lastLoginAt     DateTime?
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  tenant      Tenant             @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  party       Party              @relation(fields: [partyId], references: [id], onDelete: Restrict)
+  activations PortalActivation[]
+  sessions    PortalSession[]
+
+  @@unique([tenantId, partyId, portalType])
+  @@index([tenantId, portalType, status])
+  @@index([partyId, portalType])
+}
+
+model PortalActivation {
+  id              String        @id @default(uuid()) @db.Uuid
+  portalAccountId String        @db.Uuid
+  secretHash      String
+  expiresAt       DateTime
+  usedAt          DateTime?
+  invalidatedAt   DateTime?
+  createdAt       DateTime      @default(now())
+
+  portalAccount PortalAccount @relation(fields: [portalAccountId], references: [id], onDelete: Restrict)
+
+  @@index([portalAccountId, expiresAt])
+  @@index([portalAccountId, usedAt, invalidatedAt])
+}
+
+model PortalSession {
+  id              String   @id @default(uuid()) @db.Uuid
+  portalAccountId String   @db.Uuid
+  tokenHash       String   @unique
+  expiresAt       DateTime
+  lastSeenAt      DateTime @default(now())
+  createdAt       DateTime @default(now())
+  revokedAt       DateTime?
+
+  portalAccount PortalAccount @relation(fields: [portalAccountId], references: [id], onDelete: Restrict)
+
+  @@index([portalAccountId, revokedAt, expiresAt])
+  @@index([expiresAt])
 }
 
 model Person {
@@ -716,6 +840,7 @@ model TenantMembership {
   createdDocuments     CaseDocument[]
   assignedTasks        CaseTask[]          @relation("AssignedTasks")
   createdTasks         CaseTask[]          @relation("CreatedTasks")
+  reviewedSubmissions  ClientSubmission[]
 
   @@unique([tenantId, userId])
   @@index([userId, deletedAt])

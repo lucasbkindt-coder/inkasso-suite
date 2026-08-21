@@ -1,5 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
-import { DocumentStatus, Prisma, TemplateStatus } from "@prisma/client";
+import { DocumentStatus, PortalAccountStatus, PortalAccountType, Prisma, TemplateStatus } from "@prisma/client";
+import QRCode from "qrcode";
+import { PortalAuthService } from "../portal-auth/portal-auth.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { TenantContextService } from "../tenant/tenant-context.service";
 import { DocumentRenderDto } from "./dto/document.dto";
@@ -8,12 +10,31 @@ import { TenantDocumentSettingsDto } from "./dto/tenant-document-settings.dto";
 import { TemplateDto } from "./dto/template.dto";
 import { renderDin5008Document } from "./din5008-layout";
 
+const INITIAL_DEBTOR_PORTAL_TEMPLATE_KEYS = new Set(["payment-request"]);
+
+type PortalRenderBlock =
+  | {
+      mode: "ACTIVATION";
+      loginIdentifier: string;
+      activationCode: string;
+      activationUrl: string;
+      qrCode: Buffer;
+    }
+  | { mode: "ACTIVE" };
+
+type PortalDocumentAccess = {
+  renderBlock: PortalRenderBlock;
+  snapshot: Record<string, unknown>;
+  activation?: { portalAccountId: string; activationId: string };
+};
+
 @Injectable()
 export class DocumentsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly tenant: TenantContextService,
     private readonly storage: LocalDocumentStorage,
+    private readonly portalAuth: PortalAuthService,
   ) {}
   async settings() {
     const tenantId = await this.tenant.getTenantId();
@@ -126,30 +147,131 @@ export class DocumentsService {
     };
   }
   async generate(caseId: string, dto: DocumentRenderDto) {
-    const preview = await this.preview(caseId, dto);
     const tenantId = await this.tenant.getTenantId();
-    const pdf = await renderDin5008Document(preview.subject, preview.renderedBody, preview.dataSnapshot);
-    const storageKey = await this.storage.save(pdf);
-    const filename = `RisePay-${String((preview.dataSnapshot as { case: { caseNumber: string } }).case.caseNumber).replace(/\//g, "-")}-${Date.now()}.pdf`;
+    const [template, snapshot, caseData] = await Promise.all([
+      this.template(dto, tenantId),
+      this.snapshot(caseId, tenantId),
+      this.caseData(caseId, tenantId),
+    ]);
+    const subject = this.render(template.subject ?? template.name, snapshot);
+    const renderedBody = this.render(template.bodyTemplate, snapshot);
+    let activation: { portalAccountId: string; activationId: string } | undefined;
+    let storageKey: string | undefined;
     try {
-      return await this.prisma.caseDocument.create({
-        data: {
-          tenantId,
-          caseId,
-          templateId: preview.templateId,
-          type: (await this.template(dto, tenantId)).type,
-          status: DocumentStatus.GENERATED,
-          filename,
-          storageKey,
-          templateVersion: preview.templateVersion,
-          renderedSubject: preview.subject,
-          renderedBody: preview.renderedBody,
-          dataSnapshot: { ...preview.dataSnapshot, layoutVersion: "DIN5008_2020_FORM_B_V1" } as Prisma.InputJsonValue,
-        },
+      const portal = await this.portalBlock(template.key, caseData.debtorPartyId, tenantId);
+      if (portal?.activation) activation = portal.activation;
+      const renderSnapshot = portal
+        ? { ...snapshot, portalAccess: portal.renderBlock }
+        : snapshot;
+      const persistedSnapshot = portal
+        ? { ...snapshot, portalAccess: portal.snapshot }
+        : snapshot;
+      const pdf = await renderDin5008Document(subject, renderedBody, renderSnapshot);
+      const documentStorageKey = await this.storage.save(pdf);
+      storageKey = documentStorageKey;
+      const filename = `payveo-${String((snapshot as { case: { caseNumber: string } }).case.caseNumber).replace(/\//g, "-")}-${Date.now()}.pdf`;
+      return await this.prisma.$transaction(async (tx) => {
+        const document = await tx.caseDocument.create({
+          data: {
+            tenantId,
+            caseId,
+            templateId: template.id,
+            type: template.type,
+            status: DocumentStatus.GENERATED,
+            filename,
+            storageKey: documentStorageKey,
+            templateVersion: template.version,
+            renderedSubject: subject,
+            renderedBody,
+            dataSnapshot: {
+              ...persistedSnapshot,
+              layoutVersion: "DIN5008_2020_FORM_B_V1",
+            } as Prisma.InputJsonValue,
+          },
+        });
+        if (activation) {
+          await this.portalAuth.finalizeActivation(
+            tx,
+            activation.portalAccountId,
+            activation.activationId,
+          );
+        }
+        return document;
       });
     } catch (error) {
-      await this.storage.remove(storageKey);
+      if (storageKey) await this.storage.remove(storageKey);
+      if (activation) {
+        await this.portalAuth.discardActivation(activation.portalAccountId, activation.activationId);
+      }
       throw error;
+    }
+  }
+
+  private async portalBlock(
+    templateKey: string,
+    debtorPartyId: string,
+    tenantId: string,
+  ): Promise<PortalDocumentAccess | undefined> {
+    if (!INITIAL_DEBTOR_PORTAL_TEMPLATE_KEYS.has(templateKey)) return undefined;
+    const ensured = await this.portalAuth.ensurePortalAccountForParty(
+      tenantId,
+      debtorPartyId,
+      PortalAccountType.DEBTOR,
+    );
+    const account = ensured.account;
+    if (account.status === PortalAccountStatus.ACTIVE) {
+      return {
+        renderBlock: { mode: "ACTIVE" } satisfies PortalRenderBlock,
+        snapshot: { included: true, state: "ACTIVE", portalAccountId: account.id },
+      };
+    }
+    if (account.status !== PortalAccountStatus.PENDING_ACTIVATION) return undefined;
+
+    const activationBaseUrl = this.portalActivationBaseUrl();
+    const issued = await this.portalAuth.issueActivation(tenantId, account.id, {
+      invalidateExisting: false,
+    });
+    const activationUrl = new URL("/portal/aktivieren", activationBaseUrl);
+    activationUrl.searchParams.set("login", issued.loginIdentifier);
+    activationUrl.searchParams.set("code", issued.activationCode);
+    const qrCode = await QRCode.toBuffer(activationUrl.toString(), {
+      errorCorrectionLevel: "M",
+      margin: 1,
+      width: 180,
+    });
+    return {
+      activation: { portalAccountId: account.id, activationId: issued.activationId },
+      renderBlock: {
+        mode: "ACTIVATION",
+        loginIdentifier: issued.loginIdentifier,
+        activationCode: issued.activationCode,
+        activationUrl: activationUrl.toString(),
+        qrCode,
+      } satisfies PortalRenderBlock,
+      snapshot: {
+        included: true,
+        state: "PENDING_ACTIVATION",
+        portalAccountId: account.id,
+        loginIdentifier: issued.loginIdentifier,
+      },
+    };
+  }
+
+  private portalActivationBaseUrl() {
+    const configured = process.env.PORTAL_PUBLIC_BASE_URL?.trim();
+    if (!configured) {
+      throw new BadRequestException(
+        "PORTAL_PUBLIC_BASE_URL muss für ein Schreiben mit Portalaktivierung konfiguriert sein.",
+      );
+    }
+    try {
+      const url = new URL(configured);
+      if (process.env.NODE_ENV === "production" && url.protocol !== "https:") {
+        throw new Error("HTTPS ist in Production erforderlich.");
+      }
+      return url.toString();
+    } catch {
+      throw new BadRequestException("PORTAL_PUBLIC_BASE_URL ist ungültig.");
     }
   }
   async void(caseId: string, id: string) {

@@ -24,7 +24,10 @@ export const navigationGroups = [
   },
   {
     label: "Arbeitsorganisation",
-    items: [{ href: "/aufgaben", label: "Aufgaben & Fristen", icon: ListTodo }],
+    items: [
+      { href: "/aufgaben", label: "Aufgaben & Fristen", icon: ListTodo },
+      { href: "/auftragseingang", label: "Auftragseingang", icon: FolderKanban },
+    ],
   },
   {
     label: "Administration",
@@ -44,6 +47,7 @@ export const pageTitles: Record<string, string> = {
   "/schuldner": "Schuldner",
   "/parteien": "Parteien",
   "/aufgaben": "Aufgaben & Fristen",
+  "/auftragseingang": "Auftragseingang",
   "/mandanten": "Mandanten",
   "/zahlungen": "Zahlungen",
   "/dokumente": "Dokumente",
@@ -62,5 +66,6 @@ export function resolvePageTitle(pathname: string) {
   if (pathname.startsWith("/akten/")) return "Inkassoakte";
   if (pathname.startsWith("/parteien/")) return "Partei";
   if (pathname.startsWith("/schuldner/")) return "Schuldner";
+  if (pathname.startsWith("/auftragseingang/")) return "Auftragseingang";
   return pageTitles[pathname] ?? "Arbeitsbereich";
 }

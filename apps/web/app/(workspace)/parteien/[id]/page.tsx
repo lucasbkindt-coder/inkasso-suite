@@ -82,7 +82,7 @@ export default function PartyDetailPage() {
         <ArrowLeft className="size-4" /> Parteien
       </Link>
       <header>
-        <p className="text-sm font-medium text-primary">RisePay · Arbeitsbereich</p>
+        <p className="text-sm font-medium text-primary">payveo · Arbeitsbereich</p>
         <h2 className="mt-1 text-2xl font-semibold tracking-tight sm:text-3xl">
           {party.displayName}
         </h2>

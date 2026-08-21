@@ -51,7 +51,7 @@ export function PartiesClient() {
     <section className="space-y-6">
       <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
         <div>
-          <p className="text-sm font-medium text-primary">RisePay · Arbeitsbereich</p>
+          <p className="text-sm font-medium text-primary">payveo · Arbeitsbereich</p>
           <h2 className="mt-1 text-2xl font-semibold tracking-tight sm:text-3xl">Parteien</h2>
           <p className="mt-2 text-sm text-muted-foreground">
             Auftraggeber, Schuldner und weitere Stammdaten verwalten.

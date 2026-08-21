@@ -185,7 +185,7 @@ async function main() {
     update: {},
     create: {
       tenantId: tenant.id,
-      companyName: "RisePay Entwicklungsumgebung",
+      companyName: "payveo Entwicklungsumgebung",
       street: "Entwicklungsstraße",
       postalCode: "00000",
       city: "Entwicklungsort",
@@ -202,28 +202,28 @@ async function seedDocumentTemplates(tenantId) {
       "Zahlungsaufforderung",
       "PAYMENT_REQUEST",
       "Zahlungsaufforderung zu {{case.caseNumber}}",
-      "Sehr geehrte Damen und Herren,\n\nbitte begleichen Sie die offene Forderung aus Rechnung {{claim.invoiceNumber}} in Höhe von {{ledger.openTotal}} EUR.\n\nMit freundlichen Grüßen\nRisePay",
+      "Sehr geehrte Damen und Herren,\n\nbitte begleichen Sie die offene Forderung aus Rechnung {{claim.invoiceNumber}} in Höhe von {{ledger.openTotal}} EUR.\n\nMit freundlichen Grüßen\npayveo",
     ],
     [
       "second-payment-request",
       "2. Zahlungsaufforderung",
       "SECOND_PAYMENT_REQUEST",
       "2. Zahlungsaufforderung zu {{case.caseNumber}}",
-      "Sehr geehrte Damen und Herren,\n\nbitte beachten Sie unsere Zahlungsaufforderung zur Rechnung {{claim.invoiceNumber}}. Der offene Betrag beträgt {{ledger.openTotal}} EUR.\n\nMit freundlichen Grüßen\nRisePay",
+      "Sehr geehrte Damen und Herren,\n\nbitte beachten Sie unsere Zahlungsaufforderung zur Rechnung {{claim.invoiceNumber}}. Der offene Betrag beträgt {{ledger.openTotal}} EUR.\n\nMit freundlichen Grüßen\npayveo",
     ],
     [
       "judicial-dunning-notice",
       "Ankündigung gerichtliches Mahnverfahren",
       "JUDICIAL_DUNNING_NOTICE",
       "Hinweis zum weiteren Vorgehen",
-      "Sehr geehrte Damen und Herren,\n\nbitte prüfen Sie den offenen Betrag von {{ledger.openTotal}} EUR. Ohne eine Klärung kann die Prüfung weiterer rechtlicher Schritte erfolgen.\n\nMit freundlichen Grüßen\nRisePay",
+      "Sehr geehrte Damen und Herren,\n\nbitte prüfen Sie den offenen Betrag von {{ledger.openTotal}} EUR. Ohne eine Klärung kann die Prüfung weiterer rechtlicher Schritte erfolgen.\n\nMit freundlichen Grüßen\npayveo",
     ],
     [
       "enforcement-notice",
       "Vollstreckungsankündigung",
       "ENFORCEMENT_NOTICE",
       "Hinweis zum Forderungsvorgang",
-      "Sehr geehrte Damen und Herren,\n\ndieses Schreiben dient als Vorlage für einen Forderungsvorgang. Der offene Betrag beträgt {{ledger.openTotal}} EUR.\n\nMit freundlichen Grüßen\nRisePay",
+      "Sehr geehrte Damen und Herren,\n\ndieses Schreiben dient als Vorlage für einen Forderungsvorgang. Der offene Betrag beträgt {{ledger.openTotal}} EUR.\n\nMit freundlichen Grüßen\npayveo",
     ],
   ];
   for (const [key, name, type, subject, bodyTemplate] of templates) {
@@ -407,6 +407,28 @@ async function seedPartyMasterData(tenantId) {
     city: "Berlin",
   });
   await seedContact(client.id, { type: ContactType.EMAIL, value: "buchhaltung@muster-gmbh.de" });
+
+  const secondClient = await findOrCreateParty({
+    tenantId,
+    type: PartyType.COMPANY,
+    displayName: "Beispiel Handel GmbH",
+  });
+  await prisma.company.upsert({
+    where: { partyId: secondClient.id },
+    update: { companyName: "Beispiel Handel GmbH", legalForm: "GmbH" },
+    create: { partyId: secondClient.id, companyName: "Beispiel Handel GmbH", legalForm: "GmbH" },
+  });
+  await seedRole(secondClient.id, PartyRoleType.CLIENT);
+  await seedAddress(secondClient.id, {
+    street: "Handelsstraße",
+    houseNumber: "24",
+    postalCode: "20095",
+    city: "Hamburg",
+  });
+  await seedContact(secondClient.id, {
+    type: ContactType.EMAIL,
+    value: "buchhaltung@beispiel-handel.de",
+  });
 
   const debtor = await findOrCreateParty({
     tenantId,

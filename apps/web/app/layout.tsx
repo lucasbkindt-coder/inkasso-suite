@@ -5,8 +5,8 @@ import { ThemeProvider } from "@/components/theme-provider";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "RisePay – Arbeitsbereich",
-  description: "RisePay Forderungsmanagement",
+  title: "payveo – Arbeitsbereich",
+  description: "payveo Forderungsmanagement",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

@@ -4,5 +4,10 @@ import { CoreModule } from "../core/core.module";
 import { CasesController } from "./cases.controller";
 import { CasesService } from "./cases.service";
 
-@Module({ imports: [CoreModule], controllers: [CasesController], providers: [CasesService] })
+@Module({
+  imports: [CoreModule],
+  controllers: [CasesController],
+  providers: [CasesService],
+  exports: [CasesService],
+})
 export class CasesModule {}

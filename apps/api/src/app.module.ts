@@ -12,6 +12,8 @@ import { TasksModule } from "./tasks/tasks.module";
 import { DashboardModule } from "./dashboard/dashboard.module";
 import { PortalPreviewModule } from "./portal-preview/portal-preview.module";
 import { PortalModule } from "./portal/portal.module";
+import { ClientSubmissionsModule } from "./client-submissions/client-submissions.module";
+import { PortalAuthModule } from "./portal-auth/portal-auth.module";
 
 @Module({
   imports: [
@@ -27,6 +29,8 @@ import { PortalModule } from "./portal/portal.module";
     DashboardModule,
     PortalPreviewModule,
     PortalModule,
+    ClientSubmissionsModule,
+    PortalAuthModule,
   ],
 })
 export class AppModule {}

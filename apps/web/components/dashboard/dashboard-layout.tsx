@@ -51,7 +51,7 @@ export function DashboardLayout() {
   ] as const : [];
 
   return <div className="space-y-6 sm:space-y-8">
-    <header className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end"><div><p className="text-sm font-medium text-primary">RisePay · Arbeitsbereich</p><h2 className="mt-1 text-2xl font-semibold tracking-tight sm:text-3xl">Übersicht</h2><p className="mt-2 text-sm text-muted-foreground">Operativer Überblick über Akten, Forderungen und anstehende Arbeit.</p></div><div className="flex flex-wrap gap-2"><Button onClick={() => setTaskDialogOpen(true)} variant="outline"><Plus className="size-4" /> Aufgabe erstellen</Button><Link href="/akten"><Button><FolderKanban className="size-4" /> Neue Inkassoakte</Button></Link></div></header>
+    <header className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end"><div><p className="text-sm font-medium text-primary">payveo · Arbeitsbereich</p><h2 className="mt-1 text-2xl font-semibold tracking-tight sm:text-3xl">Übersicht</h2><p className="mt-2 text-sm text-muted-foreground">Operativer Überblick über Akten, Forderungen und anstehende Arbeit.</p></div><div className="flex flex-wrap gap-2"><Button onClick={() => setTaskDialogOpen(true)} variant="outline"><Plus className="size-4" /> Aufgabe erstellen</Button><Link href="/akten"><Button><FolderKanban className="size-4" /> Neue Inkassoakte</Button></Link></div></header>
 
     <TaskDialog onOpenChange={setTaskDialogOpen} onSaved={() => void load()} open={taskDialogOpen} />
 

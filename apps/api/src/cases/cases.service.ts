@@ -102,52 +102,55 @@ export class CasesService {
     await this.assertPartyRole(dto.debtorPartyId, tenantId, PartyRoleType.DEBTOR, "Schuldner");
     if (dto.ownerMembershipId) await this.assertOwner(dto.ownerMembershipId, tenantId);
     this.validateClaimDates(dto.claim);
-    const principalAmount = this.toDecimal(dto.claim.principalAmount);
-    const year = new Date().getUTCFullYear();
-
-    const created = await this.prisma.$transaction(async (tx) => {
-      const number = await allocateCaseNumber(tx, tenantId, year);
-      return tx.case.create({
-        data: {
-          tenantId,
-          caseNumber: number.caseNumber,
-          sequenceYear: number.sequenceYear,
-          sequenceNumber: number.sequenceNumber,
-          clientPartyId: dto.clientPartyId,
-          debtorPartyId: dto.debtorPartyId,
-          ownerMembershipId: dto.ownerMembershipId,
-          priority: dto.priority,
-          internalNotes: dto.internalNotes,
-          claim: {
-            create: {
-              tenantId,
-              invoiceNumber: dto.claim.invoiceNumber.trim(),
-              invoiceDate: new Date(dto.claim.invoiceDate),
-              dueDate: new Date(dto.claim.dueDate),
-              defaultDate: dto.claim.defaultDate ? new Date(dto.claim.defaultDate) : undefined,
-              principalAmount,
-              currency: dto.claim.currency.toUpperCase(),
-              description: dto.claim.description,
-            },
-          },
-          ledgerEntries: {
-            create: {
-              tenantId,
-              side: LedgerEntrySide.DEBIT,
-              type: LedgerEntryType.PRINCIPAL,
-              amount: principalAmount,
-              currency: dto.claim.currency.toUpperCase(),
-              bookingDate: new Date(dto.claim.invoiceDate),
-              description: `Hauptforderung ${dto.claim.invoiceNumber.trim()}`,
-              source: "case-create",
-              createdByMembershipId: dto.ownerMembershipId,
-            },
-          },
-        },
-      });
-    });
+    const created = await this.prisma.$transaction((tx) =>
+      this.createInTransaction(tx, tenantId, dto),
+    );
 
     return this.getCase(created.id, tenantId, true);
+  }
+
+  async createInTransaction(tx: Prisma.TransactionClient, tenantId: string, dto: CreateCaseDto) {
+    const principalAmount = this.toDecimal(dto.claim.principalAmount);
+    const year = new Date().getUTCFullYear();
+    const number = await allocateCaseNumber(tx, tenantId, year);
+    return tx.case.create({
+      data: {
+        tenantId,
+        caseNumber: number.caseNumber,
+        sequenceYear: number.sequenceYear,
+        sequenceNumber: number.sequenceNumber,
+        clientPartyId: dto.clientPartyId,
+        debtorPartyId: dto.debtorPartyId,
+        ownerMembershipId: dto.ownerMembershipId,
+        priority: dto.priority,
+        internalNotes: dto.internalNotes,
+        claim: {
+          create: {
+            tenantId,
+            invoiceNumber: dto.claim.invoiceNumber.trim(),
+            invoiceDate: new Date(dto.claim.invoiceDate),
+            dueDate: new Date(dto.claim.dueDate),
+            defaultDate: dto.claim.defaultDate ? new Date(dto.claim.defaultDate) : undefined,
+            principalAmount,
+            currency: dto.claim.currency.toUpperCase(),
+            description: dto.claim.description,
+          },
+        },
+        ledgerEntries: {
+          create: {
+            tenantId,
+            side: LedgerEntrySide.DEBIT,
+            type: LedgerEntryType.PRINCIPAL,
+            amount: principalAmount,
+            currency: dto.claim.currency.toUpperCase(),
+            bookingDate: new Date(dto.claim.invoiceDate),
+            description: `Hauptforderung ${dto.claim.invoiceNumber.trim()}`,
+            source: "case-create",
+            createdByMembershipId: dto.ownerMembershipId,
+          },
+        },
+      },
+    });
   }
 
   async update(id: string, dto: UpdateCaseDto) {

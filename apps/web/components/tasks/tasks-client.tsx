@@ -145,7 +145,7 @@ export function TasksClient() {
     <section className="space-y-6">
       <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
         <div>
-          <p className="text-sm font-medium text-primary">RisePay · Arbeitsbereich</p>
+          <p className="text-sm font-medium text-primary">payveo · Arbeitsbereich</p>
           <h1 className="mt-1 text-2xl font-semibold tracking-tight sm:text-3xl">Aufgaben &amp; Fristen</h1>
           <p className="mt-2 text-sm text-muted-foreground">Offene Aufgaben, Fristen und Wiedervorlagen zentral bearbeiten.</p>
         </div>

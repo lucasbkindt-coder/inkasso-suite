@@ -19,6 +19,14 @@ import type {
 } from "@/types/case";
 import type { CaseTask, CreateTaskInput, TasksResponse, UpdateTaskInput } from "@/types/task";
 import type { DashboardSummary } from "@/types/dashboard";
+import type {
+  AcceptClientSubmissionInput,
+  AcceptClientSubmissionResponse,
+  ClientSubmissionsResponse,
+  ClientSubmissionStatus,
+  DebtorCandidate,
+  InternalClientSubmission,
+} from "@/types/client-submission";
 
 const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "/api";
 
@@ -55,6 +63,12 @@ export type TasksQuery = {
   upcoming?: boolean;
   page?: number;
   pageSize?: number;
+};
+export type ClientSubmissionsQuery = {
+  page?: number;
+  pageSize?: number;
+  search?: string;
+  status?: ClientSubmissionStatus;
 };
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -100,7 +114,7 @@ async function getLedger(caseId: string) {
   const response = await request<unknown>(`/cases/${caseId}/ledger`);
   if (!isLedgerResponse(response))
     throw new Error(
-      "Die API liefert eine veraltete Forderungskonto-Antwort. Bitte die RisePay-API neu starten.",
+      "Die API liefert eine veraltete Forderungskonto-Antwort. Bitte die payveo-API neu starten.",
     );
   return response;
 }
@@ -119,6 +133,26 @@ export const caseApi = {
     const suffix = queryString(query);
     return request<CasesResponse>(`/cases${suffix ? `?${suffix}` : ""}`);
   },
+  getClientSubmissions: (query: ClientSubmissionsQuery = {}) => {
+    const suffix = queryString(query);
+    return request<ClientSubmissionsResponse>(`/client-submissions${suffix ? `?${suffix}` : ""}`);
+  },
+  getClientSubmission: (id: string) =>
+    request<InternalClientSubmission>(`/client-submissions/${id}`),
+  getSubmissionDebtorCandidates: (id: string) =>
+    request<DebtorCandidate[]>(`/client-submissions/${id}/debtor-candidates`),
+  reviewClientSubmission: (id: string) =>
+    request<InternalClientSubmission>(`/client-submissions/${id}/review`, { method: "POST" }),
+  rejectClientSubmission: (id: string, rejectionReason?: string) =>
+    request<InternalClientSubmission>(`/client-submissions/${id}/reject`, {
+      method: "POST",
+      body: JSON.stringify({ rejectionReason: rejectionReason || undefined }),
+    }),
+  acceptClientSubmission: (id: string, payload: AcceptClientSubmissionInput) =>
+    request<AcceptClientSubmissionResponse>(`/client-submissions/${id}/accept`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
   getCase: (id: string) => request<Case>(`/cases/${id}`),
   getCaseByNumber: (caseNumber: string) =>
     request<Case>(`/cases/by-number?${queryString({ caseNumber })}`),
@@ -132,8 +166,10 @@ export const caseApi = {
     const suffix = queryString(query);
     return request<TasksResponse>(`/tasks${suffix ? `?${suffix}` : ""}`);
   },
-  createTask: (payload: CreateTaskInput) => request<CaseTask>("/tasks", { method: "POST", body: JSON.stringify(payload) }),
-  updateTask: (id: string, payload: UpdateTaskInput) => request<CaseTask>(`/tasks/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
+  createTask: (payload: CreateTaskInput) =>
+    request<CaseTask>("/tasks", { method: "POST", body: JSON.stringify(payload) }),
+  updateTask: (id: string, payload: UpdateTaskInput) =>
+    request<CaseTask>(`/tasks/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
   completeTask: (id: string) => request<CaseTask>(`/tasks/${id}/complete`, { method: "POST" }),
   reopenTask: (id: string) => request<CaseTask>(`/tasks/${id}/reopen`, { method: "POST" }),
   cancelTask: (id: string) => request<CaseTask>(`/tasks/${id}/cancel`, { method: "POST" }),
