@@ -1,0 +1,6 @@
+export type InstallmentPlanStatus = "DRAFT" | "ACTIVE" | "COMPLETED" | "CANCELLED" | "DEFAULTED";
+export type InstallmentPlanItemStatus = "OPEN" | "PARTIALLY_PAID" | "PAID" | "OVERDUE" | "CANCELLED";
+export type InstallmentPlanItem = { id: string; sequenceNumber: number; dueDate: string; plannedAmount: string; creditedAmount: string; remainingAmount: string; status: InstallmentPlanItemStatus };
+export type InstallmentPlan = { id: string; status: InstallmentPlanStatus; initialOpenAmount: string; plannedInstallmentAmount: string; startDate: string; numberOfInstallments: number; activatedAt: string | null; completedAt: string | null; cancelledAt: string | null; currentCaseBalance: string; planCaseDifference: string; nextItem: InstallmentPlanItem | null; items: InstallmentPlanItem[]; case?: { id: string; caseNumber: string; clientParty: { displayName: string }; debtorParty: { displayName: string } } };
+export const installmentPlanStatusLabels: Record<InstallmentPlanStatus, string> = { DRAFT: "Entwurf", ACTIVE: "Aktiv", COMPLETED: "Erfüllt", CANCELLED: "Storniert", DEFAULTED: "Gescheitert" };
+export const installmentPlanItemStatusLabels: Record<InstallmentPlanItemStatus, string> = { OPEN: "Offen", PARTIALLY_PAID: "Teilweise bezahlt", PAID: "Bezahlt", OVERDUE: "Überfällig", CANCELLED: "Storniert" };

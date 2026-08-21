@@ -13,6 +13,7 @@ import { CaseLedger } from "./case-ledger";
 import { CaseTabs } from "./case-tabs";
 import { CaseTimeline } from "./case-timeline";
 import { CaseTasks } from "./case-tasks";
+import { CaseInstallmentPlan } from "./case-installment-plan";
 
 export function CaseDetail() {
   const params = useParams<{ id: string }>();
@@ -51,6 +52,7 @@ export function CaseDetail() {
         <div className="space-y-6">
           <CaseTabs />
           <CaseOverview caseRecord={caseRecord} />
+          <CaseInstallmentPlan caseId={caseRecord.id} />
           <CaseTasks caseId={caseRecord.id} />
           <CaseDocuments caseId={caseRecord.id} />
           <CaseLedger caseId={caseRecord.id} />

@@ -5,6 +5,7 @@ import type {
   CreateClientSubmissionResponse,
 } from "@/types/client-submission";
 import type { CreateInstallmentRequestInput, InstallmentRequest } from "@/types/installment-request";
+import type { InstallmentPlan } from "@/types/installment-plan";
 
 type ErrorResponse = { message?: string | string[] };
 
@@ -30,6 +31,7 @@ async function request<T>(path: string, token?: string, init?: RequestInit): Pro
 
 export const portalClientApi = {
   getInstallmentRequests: (caseId: string, token?: string) => request<InstallmentRequest[]>(`/portal/debtor/cases/${caseId}/installment-requests`, token),
+  getInstallmentPlan: (caseId: string, token?: string) => request<InstallmentPlan | null>(`/portal/debtor/cases/${caseId}/installment-plan`, token),
   createInstallmentRequest: (caseId: string, payload: CreateInstallmentRequestInput, token?: string) => request<InstallmentRequest>(`/portal/debtor/cases/${caseId}/installment-requests`, token, { method: "POST", body: JSON.stringify(payload) }),
   getClientSubmissions: (token?: string) =>
     request<ClientSubmissionListItem[]>("/portal/client/submissions", token),

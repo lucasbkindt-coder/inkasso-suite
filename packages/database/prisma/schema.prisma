@@ -224,6 +224,22 @@ enum InstallmentRequestStatus {
   CANCELLED
 }
 
+enum InstallmentPlanStatus {
+  DRAFT
+  ACTIVE
+  COMPLETED
+  CANCELLED
+  DEFAULTED
+}
+
+enum InstallmentPlanItemStatus {
+  OPEN
+  PARTIALLY_PAID
+  PAID
+  OVERDUE
+  CANCELLED
+}
+
 model User {
   id          String    @id @default(uuid()) @db.Uuid
   email       String    @unique
@@ -327,6 +343,8 @@ model Tenant {
   clientSubmissions ClientSubmission[]
   portalAccounts     PortalAccount[]
   installmentRequests InstallmentRequest[]
+  installmentPlans    InstallmentPlan[]
+  installmentPlanItems InstallmentPlanItem[]
 
   @@index([deletedAt])
 }
@@ -361,6 +379,7 @@ model Case {
   tasks              CaseTask[]
   acceptedSubmissions ClientSubmission[] @relation("AcceptedSubmissionCase")
   installmentRequests InstallmentRequest[]
+  installmentPlans    InstallmentPlan[]
 
   @@unique([tenantId, caseNumber])
   @@unique([tenantId, sequenceYear, sequenceNumber])
@@ -662,6 +681,7 @@ model Party {
   clientSubmissions ClientSubmission[]
   portalAccounts     PortalAccount[]
   installmentRequests InstallmentRequest[]
+  installmentPlans    InstallmentPlan[]
 
   @@index([tenantId, deletedAt, displayName])
   @@index([tenantId, type, deletedAt])
@@ -690,10 +710,58 @@ model InstallmentRequest {
   case                 Case              @relation(fields: [caseId], references: [id], onDelete: Restrict)
   debtorParty          Party             @relation(fields: [debtorPartyId], references: [id], onDelete: Restrict)
   reviewedByMembership TenantMembership? @relation(fields: [reviewedByMembershipId], references: [id], onDelete: Restrict)
+  installmentPlan      InstallmentPlan?
 
   @@index([tenantId, status, submittedAt])
   @@index([caseId, status])
   @@index([debtorPartyId, submittedAt])
+}
+
+model InstallmentPlan {
+  id                       String                @id @default(uuid()) @db.Uuid
+  tenantId                 String                @db.Uuid
+  caseId                   String                @db.Uuid
+  debtorPartyId            String                @db.Uuid
+  sourceRequestId          String                @unique @db.Uuid
+  status                   InstallmentPlanStatus @default(DRAFT)
+  initialOpenAmount        Decimal               @db.Decimal(15, 2)
+  plannedInstallmentAmount Decimal               @db.Decimal(15, 2)
+  startDate                DateTime              @db.Date
+  numberOfInstallments     Int
+  internalNote             String?
+  createdAt                DateTime              @default(now())
+  updatedAt                DateTime              @updatedAt
+  activatedAt              DateTime?
+  completedAt              DateTime?
+  cancelledAt              DateTime?
+
+  tenant        Tenant             @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  case          Case               @relation(fields: [caseId], references: [id], onDelete: Restrict)
+  debtorParty   Party              @relation(fields: [debtorPartyId], references: [id], onDelete: Restrict)
+  sourceRequest InstallmentRequest @relation(fields: [sourceRequestId], references: [id], onDelete: Restrict)
+  items         InstallmentPlanItem[]
+
+  @@index([tenantId, caseId, status])
+  @@index([tenantId, debtorPartyId, status])
+}
+
+model InstallmentPlanItem {
+  id             String                   @id @default(uuid()) @db.Uuid
+  tenantId       String                   @db.Uuid
+  planId         String                   @db.Uuid
+  sequenceNumber Int
+  dueDate        DateTime                 @db.Date
+  plannedAmount  Decimal                  @db.Decimal(15, 2)
+  status         InstallmentPlanItemStatus @default(OPEN)
+  completedAt    DateTime?
+  createdAt      DateTime                 @default(now())
+  updatedAt      DateTime                 @updatedAt
+
+  tenant Tenant          @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  plan   InstallmentPlan @relation(fields: [planId], references: [id], onDelete: Restrict)
+
+  @@unique([planId, sequenceNumber])
+  @@index([tenantId, planId, dueDate])
 }
 
 model PortalAccount {

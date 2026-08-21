@@ -28,6 +28,7 @@ import type {
   InternalClientSubmission,
 } from "@/types/client-submission";
 import type { InstallmentRequest, InstallmentRequestStatus } from "@/types/installment-request";
+import type { InstallmentPlan } from "@/types/installment-plan";
 
 const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "/api";
 
@@ -134,6 +135,12 @@ export const caseApi = {
   reviewInstallmentRequest: (id: string) => request<InstallmentRequest>(`/installment-requests/${id}/review`, { method: "POST" }),
   approveInstallmentRequest: (id: string) => request<InstallmentRequest>(`/installment-requests/${id}/approve`, { method: "POST" }),
   rejectInstallmentRequest: (id: string) => request<InstallmentRequest>(`/installment-requests/${id}/reject`, { method: "POST" }),
+  createInstallmentPlan: (id: string) => request<InstallmentPlan>(`/installment-requests/${id}/create-plan`, { method: "POST" }),
+  getInstallmentPlans: () => request<InstallmentPlan[]>("/installment-plans"),
+  getInstallmentPlan: (id: string) => request<InstallmentPlan>(`/installment-plans/${id}`),
+  activateInstallmentPlan: (id: string) => request<InstallmentPlan>(`/installment-plans/${id}/activate`, { method: "POST" }),
+  cancelInstallmentPlan: (id: string) => request<InstallmentPlan>(`/installment-plans/${id}/cancel`, { method: "POST" }),
+  defaultInstallmentPlan: (id: string) => request<InstallmentPlan>(`/installment-plans/${id}/default`, { method: "POST" }),
   getDashboardSummary: () => request<DashboardSummary>("/dashboard/summary"),
   getCases: (query: CasesQuery = {}) => {
     const suffix = queryString(query);
