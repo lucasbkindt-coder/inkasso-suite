@@ -7,14 +7,41 @@ import { formatCurrency, formatDate } from "@/components/cases/case-ui";
 import { ClientPortalNavigation } from "./client-portal-navigation";
 import { PortalDownloadButton } from "./portal-download-button";
 import { portalAuthApi } from "@/lib/portal-auth-api";
+import { portalClientApi } from "@/lib/portal-client-api";
+import { installmentRequestStatusLabels, type InstallmentRequest } from "@/types/installment-request";
 type Data = Record<string, unknown>;
+function usePreviewToken() {
+  const params = useSearchParams();
+  const previewFromRouter = params.get("preview");
+  const [state, setState] = React.useState({ ready: false, token: "" });
+  React.useEffect(() => {
+    const token =
+      previewFromRouter ??
+      new URLSearchParams(window.location.search).get("preview") ??
+      "";
+    setState({ ready: true, token });
+  }, [previewFromRouter]);
+  return state;
+}
 async function request(path: string, token?: string) {
   const r = await fetch(`/api${path}`, {
     credentials: "include",
-    headers: token ? { "x-risepay-portal-preview": token } : undefined,
+    headers: token
+      ? {
+          "x-risepay-portal-preview": token,
+          ...(process.env.NODE_ENV !== "production" ? { "x-payveo-preview-debug": "browser" } : {}),
+        }
+      : undefined,
     cache: "no-store",
   });
-  if (!r.ok) throw new Error(r.status === 401 ? "Bitte melden Sie sich für den Portalzugang an." : "Diese Portalansicht ist nicht verfügbar.");
+  if (!r.ok)
+    throw new Error(
+      r.status === 401
+        ? token
+          ? "Die interne Portalvorschau konnte nicht geladen werden. Bitte öffnen Sie die Vorschau erneut aus payveo."
+          : "Bitte melden Sie sich für den Portalzugang an."
+        : "Diese Portalansicht ist nicht verfügbar.",
+    );
   return r.json() as Promise<Data>;
 }
 export function PortalLayout({
@@ -24,18 +51,18 @@ export function PortalLayout({
   type: "Mandantenportal" | "Schuldnerportal";
   children: React.ReactNode;
 }) {
-  const p = useSearchParams();
   const pathname = usePathname();
-  const token = p.get("preview") ?? "";
+  const { ready, token } = usePreviewToken();
   const [authenticated, setAuthenticated] = React.useState(false);
   const [returnUrl, setReturnUrl] = React.useState("/");
   React.useEffect(() => {
+    if (!ready) return;
     if (token)
       void request("/portal/context", token)
         .then((value) => setReturnUrl(String(value.returnUrl)))
         .catch(() => undefined);
     else void portalAuthApi.getPortalSession().then(() => setAuthenticated(true)).catch(() => setAuthenticated(false));
-  }, [token]);
+  }, [ready, token]);
   const back = type === "Mandantenportal" ? "Ansicht als Mandant" : "Ansicht als Schuldner";
   return (
     <main className="min-h-screen bg-muted/30">
@@ -71,17 +98,19 @@ export function PortalLayout({
   );
 }
 function usePortal(path: string) {
-  const token = useSearchParams().get("preview") ?? "";
+  const { ready, token } = usePreviewToken();
   const [data, setData] = React.useState<Data | null>(null);
   const [error, setError] = React.useState("");
   React.useEffect(() => {
+    if (!ready) return;
+    setError("");
     void request(path, token)
       .then(setData)
       .catch((e) =>
         setError(e instanceof Error ? e.message : "Portalansicht konnte nicht geladen werden."),
       );
-  }, [path, token]);
-  return { data, error, token };
+  }, [path, ready, token]);
+  return { data, error, token, ready };
 }
 export function ClientPortal({ view }: { view: "summary" | "cases" | "detail" }) {
   const params = useParams<{ id: string }>();
@@ -283,8 +312,16 @@ function DebtorData({ data, token }: { data: Data; token: string }) {
           Dokumente
         </Link>
       </div>
+      {data.id ? <InstallmentSection caseId={String(data.id)} openAmount={String(ledger.totalOpen)} previewToken={token} requests={(data.installmentRequests ?? []) as InstallmentRequest[]} /> : null}
     </>
   );
+}
+function InstallmentSection({caseId,openAmount,previewToken,requests}:{caseId:string;openAmount:string;previewToken:string;requests:InstallmentRequest[]}) {
+ const [items,setItems]=React.useState(requests); const [open,setOpen]=React.useState(false); const [review,setReview]=React.useState(false); const [amount,setAmount]=React.useState(""); const [start,setStart]=React.useState(""); const [count,setCount]=React.useState(""); const [message,setMessage]=React.useState(""); const [error,setError]=React.useState(""); const [pending,setPending]=React.useState(false);
+ const active=items.find((item)=>item.status==="SUBMITTED"||item.status==="UNDER_REVIEW");
+ const submit=async()=>{if(previewToken){setError("Im Vorschaumodus können keine Ratenzahlungsanfragen abgesendet werden.");return;}setPending(true);setError("");try{const item=await portalClientApi.createInstallmentRequest(caseId,{requestedMonthlyAmount:amount,preferredStartDate:start,numberOfInstallments:count?Number(count):undefined,debtorMessage:message||undefined});setItems([item,...items]);setOpen(false);setReview(false)}catch(cause){setError(cause instanceof Error&&cause.message.includes("bereits")?"Für diese Akte liegt bereits eine offene Ratenzahlungsanfrage vor.":"Die Anfrage konnte nicht abgesendet werden.")}finally{setPending(false)}};
+ const check=(e:React.FormEvent)=>{e.preventDefault();if(!/^\d+(\.\d{1,2})?$/.test(amount)||Number(amount)<=0){setError("Bitte geben Sie eine monatliche Rate größer als 0 ein.");return}if(!start){setError("Bitte geben Sie einen Starttermin an.");return}if(count&&!/^[1-9]\d*$/.test(count)){setError("Die Ratenanzahl muss eine positive ganze Zahl sein.");return}setError("");setReview(true)};
+ return <section className="mt-8 rounded-xl border bg-card p-5"><h2 className="text-xl font-semibold">Ratenzahlung</h2>{items.map(item=><div className="mt-3 rounded-lg bg-muted/40 p-3 text-sm" key={item.id}><strong>{installmentRequestStatusLabels[item.status]}</strong><p>{item.status==="SUBMITTED"?"Wir haben Ihre Anfrage erhalten.":item.status==="UNDER_REVIEW"?"Ihre Anfrage wird derzeit geprüft.":item.status==="APPROVED"?"Ihre Ratenzahlungsanfrage wurde genehmigt.":item.status==="REJECTED"?"Die Ratenzahlungsanfrage wurde abgelehnt.":""}</p><p>Gewünschte Rate: {formatCurrency(item.requestedMonthlyAmount,"EUR")} · Start: {formatDate(item.preferredStartDate)}{item.numberOfInstallments?` · ${item.numberOfInstallments} Raten`:""}</p>{item.debtorMessage?<p>{item.debtorMessage}</p>:null}</div>)}{active?null:!open?<><button className="mt-4 rounded-lg bg-primary px-3 py-2 text-primary-foreground" onClick={()=>setOpen(true)} type="button">Ratenzahlung anfragen</button>{previewToken?<p className="mt-2 text-sm text-muted-foreground">Im Vorschaumodus können keine Ratenzahlungsanfragen abgesendet werden.</p>:null}</>:review?<div className="mt-4 space-y-3 rounded-lg border p-4"><h3 className="font-semibold">Zusammenfassung Ihrer Anfrage</h3><p>Aktuell offener Betrag: {formatCurrency(openAmount,"EUR")}</p><p>Gewünschte monatliche Rate: {formatCurrency(amount,"EUR")}</p><p>Gewünschter Starttermin: {formatDate(start)}</p>{count?<p>Gewünschte Ratenanzahl: {count}</p>:null}{message?<p>Nachricht: {message}</p>:null}<p className="text-sm text-muted-foreground">Die Übermittlung Ihrer Anfrage stellt noch keine Ratenzahlungsvereinbarung dar. payveo prüft Ihren Vorschlag zunächst.</p>{error?<p className="text-sm text-destructive">{error}</p>:null}<div className="flex flex-wrap gap-2"><button className="rounded-lg border px-3 py-2" onClick={()=>setReview(false)} type="button">Zurück und bearbeiten</button><button className="rounded-lg bg-primary px-3 py-2 text-primary-foreground disabled:opacity-50" disabled={pending||Boolean(previewToken)} onClick={()=>void submit()} type="button">{pending?"Wird gesendet …":"Anfrage verbindlich absenden"}</button></div></div>:<form className="mt-4 space-y-3" onSubmit={check}><label className="block text-sm">Gewünschte monatliche Rate<input className="mt-1 w-full rounded border p-2" min="0.01" onChange={e=>setAmount(e.target.value)} required step="0.01" value={amount}/></label><label className="block text-sm">Gewünschter Starttermin<input className="mt-1 w-full rounded border p-2" onChange={e=>setStart(e.target.value)} required type="date" value={start}/></label><label className="block text-sm">Gewünschte Ratenanzahl (optional)<input className="mt-1 w-full rounded border p-2" min="1" onChange={e=>setCount(e.target.value)} step="1" type="number" value={count}/></label><label className="block text-sm">Nachricht<textarea className="mt-1 w-full rounded border p-2" onChange={e=>setMessage(e.target.value)} value={message}/></label>{error?<p className="text-sm text-destructive">{error}</p>:null}<button className="rounded-lg bg-primary px-3 py-2 text-primary-foreground" type="submit">Anfrage prüfen</button></form>}</section>
 }
 function AuthenticatedHeader() {
   const [pending, setPending] = React.useState(false);

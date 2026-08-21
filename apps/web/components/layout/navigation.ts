@@ -27,6 +27,7 @@ export const navigationGroups = [
     items: [
       { href: "/aufgaben", label: "Aufgaben & Fristen", icon: ListTodo },
       { href: "/auftragseingang", label: "Auftragseingang", icon: FolderKanban },
+      { href: "/ratenanfragen", label: "Ratenanfragen", icon: ListTodo },
     ],
   },
   {
@@ -48,6 +49,7 @@ export const pageTitles: Record<string, string> = {
   "/parteien": "Parteien",
   "/aufgaben": "Aufgaben & Fristen",
   "/auftragseingang": "Auftragseingang",
+  "/ratenanfragen": "Ratenanfragen",
   "/mandanten": "Mandanten",
   "/zahlungen": "Zahlungen",
   "/dokumente": "Dokumente",
@@ -67,5 +69,6 @@ export function resolvePageTitle(pathname: string) {
   if (pathname.startsWith("/parteien/")) return "Partei";
   if (pathname.startsWith("/schuldner/")) return "Schuldner";
   if (pathname.startsWith("/auftragseingang/")) return "Auftragseingang";
+  if (pathname.startsWith("/ratenanfragen/")) return "Ratenanfrage";
   return pageTitles[pathname] ?? "Arbeitsbereich";
 }

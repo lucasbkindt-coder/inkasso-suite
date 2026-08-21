@@ -23,7 +23,7 @@ export class PortalPreviewService {
   async require(token: string | undefined, expected: PortalType) {
     const preview = token ? this.tokens.get(token) : undefined;
     if (!preview || preview.expiresAt <= new Date() || preview.portalType !== expected) {
-      if (token) this.tokens.delete(token);
+      if (preview && preview.expiresAt <= new Date() && token) this.tokens.delete(token);
       throw new UnauthorizedException("Ungültiger oder abgelaufener Portalvorschauzugriff.");
     }
     return preview;

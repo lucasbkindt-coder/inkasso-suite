@@ -27,6 +27,7 @@ import type {
   DebtorCandidate,
   InternalClientSubmission,
 } from "@/types/client-submission";
+import type { InstallmentRequest, InstallmentRequestStatus } from "@/types/installment-request";
 
 const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "/api";
 
@@ -128,6 +129,11 @@ function queryString(query: Record<string, string | number | boolean | undefined
 }
 
 export const caseApi = {
+  getInstallmentRequests: () => request<InstallmentRequest[]>("/installment-requests"),
+  getInstallmentRequest: (id: string) => request<InstallmentRequest>(`/installment-requests/${id}`),
+  reviewInstallmentRequest: (id: string) => request<InstallmentRequest>(`/installment-requests/${id}/review`, { method: "POST" }),
+  approveInstallmentRequest: (id: string) => request<InstallmentRequest>(`/installment-requests/${id}/approve`, { method: "POST" }),
+  rejectInstallmentRequest: (id: string) => request<InstallmentRequest>(`/installment-requests/${id}/reject`, { method: "POST" }),
   getDashboardSummary: () => request<DashboardSummary>("/dashboard/summary"),
   getCases: (query: CasesQuery = {}) => {
     const suffix = queryString(query);

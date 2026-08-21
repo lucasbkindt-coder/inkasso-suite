@@ -14,6 +14,7 @@ import { PortalPreviewModule } from "./portal-preview/portal-preview.module";
 import { PortalModule } from "./portal/portal.module";
 import { ClientSubmissionsModule } from "./client-submissions/client-submissions.module";
 import { PortalAuthModule } from "./portal-auth/portal-auth.module";
+import { InstallmentRequestsModule } from "./installment-requests/installment-requests.module";
 
 @Module({
   imports: [
@@ -31,6 +32,7 @@ import { PortalAuthModule } from "./portal-auth/portal-auth.module";
     PortalModule,
     ClientSubmissionsModule,
     PortalAuthModule,
+    InstallmentRequestsModule,
   ],
 })
 export class AppModule {}

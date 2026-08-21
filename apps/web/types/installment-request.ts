@@ -1,0 +1,4 @@
+export type InstallmentRequestStatus = "SUBMITTED" | "UNDER_REVIEW" | "APPROVED" | "REJECTED" | "CANCELLED";
+export type InstallmentRequest = { id: string; status: InstallmentRequestStatus; requestedMonthlyAmount: string; preferredStartDate: string; numberOfInstallments: number | null; debtorMessage: string | null; submittedAt: string; reviewedAt?: string | null; approvedAt?: string | null; rejectedAt?: string | null; case?: { caseNumber: string; clientParty: { displayName: string }; debtorParty: { displayName: string } } };
+export type CreateInstallmentRequestInput = { requestedMonthlyAmount: string; preferredStartDate: string; numberOfInstallments?: number; debtorMessage?: string };
+export const installmentRequestStatusLabels: Record<InstallmentRequestStatus, string> = { SUBMITTED: "Eingegangen", UNDER_REVIEW: "In Prüfung", APPROVED: "Genehmigt", REJECTED: "Abgelehnt", CANCELLED: "Storniert" };

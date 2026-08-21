@@ -216,6 +216,14 @@ enum TaskPriority {
   URGENT
 }
 
+enum InstallmentRequestStatus {
+  SUBMITTED
+  UNDER_REVIEW
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
 model User {
   id          String    @id @default(uuid()) @db.Uuid
   email       String    @unique
@@ -318,6 +326,7 @@ model Tenant {
   tasks              CaseTask[]
   clientSubmissions ClientSubmission[]
   portalAccounts     PortalAccount[]
+  installmentRequests InstallmentRequest[]
 
   @@index([deletedAt])
 }
@@ -351,6 +360,7 @@ model Case {
   documents          CaseDocument[]
   tasks              CaseTask[]
   acceptedSubmissions ClientSubmission[] @relation("AcceptedSubmissionCase")
+  installmentRequests InstallmentRequest[]
 
   @@unique([tenantId, caseNumber])
   @@unique([tenantId, sequenceYear, sequenceNumber])
@@ -651,9 +661,39 @@ model Party {
   debtorCases Case[]      @relation("CaseDebtor")
   clientSubmissions ClientSubmission[]
   portalAccounts     PortalAccount[]
+  installmentRequests InstallmentRequest[]
 
   @@index([tenantId, deletedAt, displayName])
   @@index([tenantId, type, deletedAt])
+}
+
+model InstallmentRequest {
+  id                     String                   @id @default(uuid()) @db.Uuid
+  tenantId               String                   @db.Uuid
+  caseId                 String                   @db.Uuid
+  debtorPartyId          String                   @db.Uuid
+  status                 InstallmentRequestStatus @default(SUBMITTED)
+  requestedMonthlyAmount Decimal                  @db.Decimal(15, 2)
+  preferredStartDate     DateTime                 @db.Date
+  numberOfInstallments   Int?
+  debtorMessage          String?
+  submittedAt            DateTime                 @default(now())
+  reviewedAt             DateTime?
+  approvedAt             DateTime?
+  rejectedAt             DateTime?
+  reviewedByMembershipId String?                  @db.Uuid
+  internalNote           String?
+  createdAt              DateTime                 @default(now())
+  updatedAt              DateTime                 @updatedAt
+
+  tenant               Tenant            @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  case                 Case              @relation(fields: [caseId], references: [id], onDelete: Restrict)
+  debtorParty          Party             @relation(fields: [debtorPartyId], references: [id], onDelete: Restrict)
+  reviewedByMembership TenantMembership? @relation(fields: [reviewedByMembershipId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId, status, submittedAt])
+  @@index([caseId, status])
+  @@index([debtorPartyId, submittedAt])
 }
 
 model PortalAccount {
@@ -841,6 +881,7 @@ model TenantMembership {
   assignedTasks        CaseTask[]          @relation("AssignedTasks")
   createdTasks         CaseTask[]          @relation("CreatedTasks")
   reviewedSubmissions  ClientSubmission[]
+  reviewedInstallmentRequests InstallmentRequest[]
 
   @@unique([tenantId, userId])
   @@index([userId, deletedAt])
