@@ -1,5 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
-import { PartyRoleType, PartyType, Prisma } from "@prisma/client";
+import { ActivityEventType, PartyRoleType, PartyType, Prisma } from "@prisma/client";
+import { ActivityService } from "../activity/activity.service";
+import { StaffAuthService } from "../staff-auth/staff-auth.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { TenantContextService } from "../tenant/tenant-context.service";
 import { CreatePartyDto } from "./dto/create-party.dto";
@@ -19,6 +21,8 @@ export class PartiesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly tenantContext: TenantContextService,
+    private readonly staffAuth: StaffAuthService,
+    private readonly activity: ActivityService,
   ) {}
 
   async findAll(query: QueryPartiesDto) {
@@ -89,8 +93,9 @@ export class PartiesService {
     this.validate(dto);
     const tenantId = await this.tenantContext.getTenantId();
     const displayName = this.displayName(dto);
-    return this.prisma.$transaction((tx) =>
-      tx.party.create({
+    const actorMembershipId = this.tenantContext.getStaffContext().tenantMembershipId;
+    return this.prisma.$transaction(async (tx) => {
+      const party = await tx.party.create({
         data: {
           tenantId,
           type: dto.type,
@@ -130,8 +135,18 @@ export class PartiesService {
           contacts: { create: dto.contacts },
         },
         include: detailInclude,
-      }),
-    );
+      });
+      await this.activity.recordStaffEvent(tx, actorMembershipId, {
+        tenantId,
+        partyId: party.id,
+        eventType: ActivityEventType.PARTY_CREATED,
+        description: `Partei ${party.displayName} wurde angelegt.`,
+        metadata: { partyType: party.type },
+        sourceEntityType: "Party",
+        sourceEntityId: party.id,
+      });
+      return party;
+    });
   }
 
   async update(id: string, dto: UpdatePartyDto) {
@@ -199,7 +214,27 @@ export class PartiesService {
             registerNumber: dto.registerNumber,
           },
         });
-      return tx.party.update({ where: { id }, data: { displayName }, include: detailInclude });
+      const party = await tx.party.update({ where: { id }, data: { displayName }, include: detailInclude });
+      const changedFields = Object.keys(dto);
+      const eventType = dto.addresses && changedFields.length === 2 && changedFields.includes("type")
+        ? ActivityEventType.PARTY_ADDRESS_UPDATED
+        : dto.contacts && changedFields.length === 2 && changedFields.includes("type")
+          ? ActivityEventType.PARTY_CONTACT_UPDATED
+          : ActivityEventType.PARTY_UPDATED;
+      await this.activity.recordStaffEvent(tx, this.tenantContext.getStaffContext().tenantMembershipId, {
+        tenantId,
+        partyId: id,
+        eventType,
+        description: eventType === ActivityEventType.PARTY_ADDRESS_UPDATED
+          ? "Anschrift wurde aktualisiert."
+          : eventType === ActivityEventType.PARTY_CONTACT_UPDATED
+            ? "Kontaktdaten wurden aktualisiert."
+            : "Partei wurde bearbeitet.",
+        metadata: { changedFields },
+        sourceEntityType: "Party",
+        sourceEntityId: id,
+      });
+      return party;
     });
   }
 
@@ -215,6 +250,13 @@ export class PartiesService {
     });
     if (!party) throw new NotFoundException("Gelöschte Partei wurde nicht gefunden.");
     return this.prisma.party.update({ where: { id }, data: { deletedAt: null } });
+  }
+
+  async activities(id: string, page = 1, limit = 25) {
+    const tenantId = await this.tenantContext.getTenantId();
+    this.staffAuth.requirePermission(this.tenantContext.getStaffContext(), "debtor:read");
+    await this.getParty(id, tenantId, true);
+    return this.activity.listForParty(tenantId, id, page, limit);
   }
 
   private async getParty(id: string, tenantId: string, active: boolean) {

@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
-import { DocumentDeliveryChannel, DocumentDeliveryStatus, DocumentStatus, PortalAccountStatus, PortalAccountType, Prisma, TemplateStatus } from "@prisma/client";
+import { ActivityEventType, DocumentDeliveryChannel, DocumentDeliveryStatus, DocumentStatus, PortalAccountStatus, PortalAccountType, Prisma, TemplateStatus } from "@prisma/client";
+import { ActivityService } from "../activity/activity.service";
 import QRCode from "qrcode";
 import { PortalAuthService } from "../portal-auth/portal-auth.service";
 import { PrismaService } from "../prisma/prisma.service";
@@ -51,6 +52,7 @@ export class DocumentsService {
     private readonly storage: LocalDocumentStorage,
     private readonly portalAuth: PortalAuthService,
     private readonly mail: MailService,
+    private readonly activity: ActivityService,
   ) {}
   async settings() {
     const tenantId = await this.tenant.getTenantId();
@@ -230,6 +232,16 @@ export class DocumentsService {
             activation.activationId,
           );
         }
+        await this.activity.recordStaffEvent(tx, this.tenant.getStaffContext().tenantMembershipId, {
+          tenantId,
+          caseId,
+          partyId: caseData.debtorPartyId,
+          eventType: ActivityEventType.DOCUMENT_CREATED,
+          description: `${template.name} wurde erstellt.`,
+          metadata: { documentId: document.id, templateKey: template.key, documentName: document.filename },
+          sourceEntityType: "CaseDocument",
+          sourceEntityId: document.id,
+        });
         return document;
       });
       documentPersisted = true;
@@ -308,7 +320,7 @@ export class DocumentsService {
     if (rule.requiresPaymentDueDate && !dueDate) throw new BadRequestException("Für dieses Schreiben muss eine konkrete Zahlungsfrist angegeben werden.");
     if (dueDate && new Date(String(dueDate).split(".").reverse().join("-")).getTime() <= Date.now()) throw new BadRequestException("Die Zahlungsfrist muss in der Zukunft liegen.");
     if (templateKey === "payment-request" && caseData.debtorParty.type === "PERSON") {
-      const required = ["companyName", "street", "postalCode", "city", "iban", "collectionRegistrationAuthority", "collectionRegistrationAddress", "collectionRegistrationContact"] as const;
+      const required = ["name", "street", "postalCode", "city", "iban", "collectionRegistrationAuthority", "collectionRegistrationAddress", "collectionRegistrationContact"] as const;
       const missing = required.find((key) => !company[key]);
       if (missing) throw new BadRequestException(this.missingPaymentRequestSettingMessage(missing));
     }
@@ -321,14 +333,14 @@ export class DocumentsService {
   }
 
   private missingPaymentRequestSettingMessage(field: string) {
-    const labels: Record<string, string> = { companyName: "Firmenname", street: "Straße", postalCode: "PLZ", city: "Ort", iban: "IBAN", collectionRegistrationAuthority: "Zuständige Aufsichtsbehörde", collectionRegistrationAddress: "Anschrift der Aufsichtsbehörde", collectionRegistrationContact: "Elektronische Erreichbarkeit der Aufsichtsbehörde" };
+    const labels: Record<string, string> = { name: "Firmenname", street: "Straße", postalCode: "PLZ", city: "Ort", iban: "IBAN", collectionRegistrationAuthority: "Zuständige Aufsichtsbehörde", collectionRegistrationAddress: "Anschrift der Aufsichtsbehörde", collectionRegistrationContact: "Elektronische Erreichbarkeit der Aufsichtsbehörde" };
     return `${labels[field] ?? field} ist in den Unternehmenseinstellungen nicht hinterlegt.`;
   }
 
   private previewWarnings(templateKey: string, snapshot: Record<string, unknown>) {
     if (templateKey !== "payment-request" || (snapshot.debtor as Record<string, unknown>).type !== "PERSON") return [];
     const company = snapshot.company as Record<string, unknown>;
-    const required = ["companyName", "street", "postalCode", "city", "iban", "collectionRegistrationAuthority", "collectionRegistrationAddress", "collectionRegistrationContact"];
+    const required = ["name", "street", "postalCode", "city", "iban", "collectionRegistrationAuthority", "collectionRegistrationAddress", "collectionRegistrationContact"];
     return required.filter((field) => !company[field]).map((field) => this.missingPaymentRequestSettingMessage(field));
   }
 
@@ -353,9 +365,11 @@ export class DocumentsService {
     const document = await this.get(caseId, id);
     if (document.status === DocumentStatus.VOIDED)
       throw new BadRequestException("Dokument ist bereits ungültig.");
-    return this.prisma.caseDocument.update({
-      where: { id },
-      data: { status: DocumentStatus.VOIDED, voidedAt: new Date() },
+    return this.prisma.$transaction(async (tx) => {
+      const updated = await tx.caseDocument.update({ where: { id }, data: { status: DocumentStatus.VOIDED, voidedAt: new Date() } });
+      const caseRecord = await tx.case.findFirstOrThrow({ where: { id: caseId, tenantId: updated.tenantId }, select: { debtorPartyId: true } });
+      await this.activity.recordStaffEvent(tx, this.tenant.getStaffContext().tenantMembershipId, { tenantId: updated.tenantId, caseId, partyId: caseRecord.debtorPartyId, eventType: ActivityEventType.DOCUMENT_VOIDED, description: `${updated.filename} wurde annulliert.`, metadata: { documentId: updated.id }, sourceEntityType: "CaseDocument", sourceEntityId: updated.id });
+      return updated;
     });
   }
   async download(caseId: string, id: string) {
@@ -524,8 +538,19 @@ export class DocumentsService {
     const recipient = document.case.debtorParty.contacts[0]?.value;
     const subject = `Forderungsangelegenheit – Aktenzeichen ${document.dataSnapshot && typeof document.dataSnapshot === "object" ? (document.dataSnapshot as { case?: { caseNumber?: string } }).case?.caseNumber ?? document.caseId : document.caseId}`;
     const delivery = await this.prisma.documentDelivery.upsert({ where: { documentId_channel: { documentId, channel: DocumentDeliveryChannel.EMAIL } }, update: {}, create: { tenantId, documentId, caseId: document.caseId, channel: DocumentDeliveryChannel.EMAIL, status: recipient ? DocumentDeliveryStatus.PENDING : DocumentDeliveryStatus.SKIPPED, recipient, subject } });
-    if (!recipient || delivery.status === DocumentDeliveryStatus.SENT) return;
-    try { const sent = await this.mail.send({ to: recipient, subject, text: `Guten Tag,\n\nanbei erhalten Sie das Forderungsschreiben zu Ihrem Aktenzeichen ${subject.split(" ").at(-1)}.\n\nMit freundlichen Grüßen\npayveo`, attachments: [{ filename: document.filename, contentType: "application/pdf", content: await this.storage.read(document.storageKey) }] }); await this.prisma.documentDelivery.update({ where: { id: delivery.id }, data: { status: DocumentDeliveryStatus.SENT, attemptedAt: new Date(), sentAt: new Date(), provider: sent.provider, providerMessageId: sent.providerMessageId, errorCode: null, errorMessage: null } }); } catch (error) { await this.prisma.documentDelivery.update({ where: { id: delivery.id }, data: { status: DocumentDeliveryStatus.FAILED, attemptedAt: new Date(), failedAt: new Date(), errorCode: "MAIL_SEND_FAILED", errorMessage: error instanceof Error ? error.message : "Mailversand fehlgeschlagen." } }); }
+    if (!recipient) {
+      await this.activity.recordSystemEvent(this.prisma, { tenantId, caseId: document.caseId, partyId: debtorPartyId, eventType: ActivityEventType.DOCUMENT_EMAIL_SKIPPED, description: "Forderungs-E-Mail wurde mangels E-Mail-Adresse übersprungen.", metadata: { documentId }, sourceEntityType: "DocumentDelivery", sourceEntityId: delivery.id });
+      return;
+    }
+    if (delivery.status === DocumentDeliveryStatus.SENT) return;
+    try {
+      const sent = await this.mail.send({ to: recipient, subject, text: `Guten Tag,\n\nanbei erhalten Sie das Forderungsschreiben zu Ihrem Aktenzeichen ${subject.split(" ").at(-1)}.\n\nMit freundlichen Grüßen\npayveo`, attachments: [{ filename: document.filename, contentType: "application/pdf", content: await this.storage.read(document.storageKey) }] });
+      const updated = await this.prisma.documentDelivery.update({ where: { id: delivery.id }, data: { status: DocumentDeliveryStatus.SENT, attemptedAt: new Date(), sentAt: new Date(), provider: sent.provider, providerMessageId: sent.providerMessageId, errorCode: null, errorMessage: null } });
+      await this.activity.recordSystemEvent(this.prisma, { tenantId, caseId: document.caseId, partyId: debtorPartyId, eventType: ActivityEventType.DOCUMENT_EMAIL_SENT, description: "Forderungs-E-Mail wurde versendet.", metadata: { documentId, deliveryId: updated.id }, sourceEntityType: "DocumentDelivery", sourceEntityId: updated.id });
+    } catch (error) {
+      const updated = await this.prisma.documentDelivery.update({ where: { id: delivery.id }, data: { status: DocumentDeliveryStatus.FAILED, attemptedAt: new Date(), failedAt: new Date(), errorCode: "MAIL_SEND_FAILED", errorMessage: error instanceof Error ? error.message : "Mailversand fehlgeschlagen." } });
+      await this.activity.recordSystemEvent(this.prisma, { tenantId, caseId: document.caseId, partyId: debtorPartyId, eventType: ActivityEventType.DOCUMENT_EMAIL_FAILED, description: "Forderungs-E-Mail konnte nicht versendet werden.", metadata: { documentId, deliveryId: updated.id }, sourceEntityType: "DocumentDelivery", sourceEntityId: updated.id });
+    }
   }
   private render(template: string, snapshot: Record<string, unknown>) {
     return template.replace(/{{\s*([\w.]+)\s*}}/g, (_match, path: string) => {

@@ -6,6 +6,7 @@ import {
 } from "@nestjs/common";
 import {
   AllocationPolicy,
+  ActivityEventType,
   CaseCostCalculationStatus,
   LedgerEntrySide,
   LedgerEntryStatus,
@@ -16,6 +17,7 @@ import {
 
 import { PrismaService } from "../prisma/prisma.service";
 import { TenantContextService } from "../tenant/tenant-context.service";
+import { ActivityService } from "../activity/activity.service";
 import { CreateLedgerEntryDto } from "./dto/create-ledger-entry.dto";
 import { CreatePaymentDto } from "./dto/create-payment.dto";
 
@@ -54,6 +56,7 @@ export class LedgerService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly tenantContext: TenantContextService,
+    private readonly activity: ActivityService,
   ) {}
 
   async findAll(caseId: string) {
@@ -153,6 +156,17 @@ export class LedgerService {
           source: "payment-allocation",
           allocationPolicy: dto.allocationPolicy,
         },
+      });
+      const caseRecord = await tx.case.findFirstOrThrow({ where: { id: caseId, tenantId }, select: { debtorPartyId: true } });
+      await this.activity.recordStaffEvent(tx, this.tenantContext.getStaffContext().tenantMembershipId, {
+        tenantId,
+        caseId,
+        partyId: caseRecord.debtorPartyId,
+        eventType: ActivityEventType.PAYMENT_CREATED,
+        description: `Zahlung über ${amount.toFixed(2)} ${dto.currency.toUpperCase()} wurde erfasst.`,
+        metadata: { paymentId: payment.id, amount: amount.toFixed(2), bookingDate: dto.bookingDate },
+        sourceEntityType: "CaseLedgerEntry",
+        sourceEntityId: payment.id,
       });
       const targets = await tx.caseLedgerEntry.findMany({
         where: {
@@ -268,7 +282,8 @@ export class LedgerService {
     if (amount.isNegative() || amount.isZero())
       throw new BadRequestException("Der Buchungsbetrag muss größer als null sein.");
     const side = this.resolveSide(dto.type, dto.side);
-    return this.prisma.caseLedgerEntry.create({
+    return this.prisma.$transaction(async (tx) => {
+      const entry = await tx.caseLedgerEntry.create({
       data: {
         tenantId,
         caseId,
@@ -283,6 +298,21 @@ export class LedgerService {
         source: dto.source?.trim() ?? "manual",
         createdByMembershipId: dto.createdByMembershipId,
       },
+      });
+      if (costTypes.has(entry.type)) {
+        const caseRecord = await tx.case.findFirstOrThrow({ where: { id: caseId, tenantId }, select: { debtorPartyId: true } });
+        await this.activity.recordStaffEvent(tx, this.tenantContext.getStaffContext().tenantMembershipId, {
+          tenantId,
+          caseId,
+          partyId: caseRecord.debtorPartyId,
+          eventType: ActivityEventType.COST_CREATED,
+          description: `Kosten über ${entry.amount.toFixed(2)} ${entry.currency} wurden gebucht.`,
+          metadata: { costId: entry.id, amount: entry.amount.toFixed(2), type: entry.type, description: entry.description },
+          sourceEntityType: "CaseLedgerEntry",
+          sourceEntityId: entry.id,
+        });
+      }
+      return entry;
     });
   }
 
@@ -326,6 +356,19 @@ export class LedgerService {
           createdByMembershipId: entry.createdByMembershipId,
         },
       });
+      if (entry.type === LedgerEntryType.PAYMENT) {
+        const caseRecord = await tx.case.findFirstOrThrow({ where: { id: caseId, tenantId }, select: { debtorPartyId: true } });
+        await this.activity.recordStaffEvent(tx, this.tenantContext.getStaffContext().tenantMembershipId, {
+          tenantId,
+          caseId,
+          partyId: caseRecord.debtorPartyId,
+          eventType: ActivityEventType.PAYMENT_REVERSED,
+          description: `Zahlung über ${entry.amount.toFixed(2)} ${entry.currency} wurde storniert.`,
+          metadata: { paymentId: entry.id, amount: entry.amount.toFixed(2) },
+          sourceEntityType: "CaseLedgerEntry",
+          sourceEntityId: entry.id,
+        });
+      }
       if (entry.costCalculationId) {
         const activeEntries = await tx.caseLedgerEntry.count({
           where: { costCalculationId: entry.costCalculationId, status: LedgerEntryStatus.ACTIVE },

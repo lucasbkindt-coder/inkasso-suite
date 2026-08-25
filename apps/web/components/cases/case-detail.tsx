@@ -14,6 +14,7 @@ import { CaseTabs } from "./case-tabs";
 import { CaseTasks } from "./case-tasks";
 import { CaseInstallmentPlan } from "./case-installment-plan";
 import { CaseAssignee } from "./case-assignee";
+import { CaseTimeline } from "./case-timeline";
 
 export function CaseDetail() {
   const params = useParams<{ id: string }>();
@@ -55,6 +56,7 @@ export function CaseDetail() {
           <CaseOverview caseRecord={caseRecord} />
           <CaseInstallmentPlan caseId={caseRecord.id} />
           <CaseTasks caseId={caseRecord.id} />
+          <CaseTimeline caseId={caseRecord.id} />
           <CaseDocuments caseId={caseRecord.id} />
           <CaseLedger caseId={caseRecord.id} />
         </div>

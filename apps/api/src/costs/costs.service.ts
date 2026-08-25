@@ -8,6 +8,7 @@ import {
 import {
   CaseCostCalculationStatus,
   CaseCostCalculationType,
+  ActivityEventType,
   LedgerEntrySide,
   LedgerEntryType,
   Prisma,
@@ -17,6 +18,7 @@ import { LegalReferenceSyncService } from "../legal-references/legal-reference-s
 import { PrismaService } from "../prisma/prisma.service";
 import { TenantContextService } from "../tenant/tenant-context.service";
 import { LedgerService } from "../ledger/ledger.service";
+import { ActivityService } from "../activity/activity.service";
 import {
   CaseInterestCostDto,
   CaseRvgCostDto,
@@ -39,6 +41,7 @@ export class CostsService {
     private readonly legal: LegalReferenceSyncService,
     private readonly tenantContext: TenantContextService,
     private readonly ledger: LedgerService,
+    private readonly activity: ActivityService,
   ) {}
   async rvgPreview(dto: RvgPreviewDto) {
     const date = new Date(dto.calculationDate),
@@ -206,6 +209,8 @@ export class CostsService {
           }),
         ),
       );
+      const caseRecord = await tx.case.findFirstOrThrow({ where: { id: caseId, tenantId }, select: { debtorPartyId: true } });
+      await this.activity.recordStaffEvent(tx, this.tenantContext.getStaffContext().tenantMembershipId, { tenantId, caseId, partyId: caseRecord.debtorPartyId, eventType: ActivityEventType.COST_CREATED, description: `RVG-Inkassokosten über ${calculation.calculatedAmount.toFixed(2)} ${claim.currency} wurden gebucht.`, metadata: { costId: calculation.id, amount: calculation.calculatedAmount.toFixed(2), type: calculation.type }, sourceEntityType: "CaseCostCalculation", sourceEntityId: calculation.id });
       return { calculation, ledgerEntries: entries, preview };
     });
   }
@@ -277,6 +282,8 @@ export class CostsService {
           source: "interest-calculation",
         },
       });
+      const caseRecord = await tx.case.findFirstOrThrow({ where: { id: caseId, tenantId }, select: { debtorPartyId: true } });
+      await this.activity.recordStaffEvent(tx, this.tenantContext.getStaffContext().tenantMembershipId, { tenantId, caseId, partyId: caseRecord.debtorPartyId, eventType: ActivityEventType.COST_CREATED, description: `Verzugszinsen über ${calculation.calculatedAmount.toFixed(2)} ${claim.currency} wurden gebucht.`, metadata: { costId: calculation.id, amount: calculation.calculatedAmount.toFixed(2), type: calculation.type }, sourceEntityType: "CaseCostCalculation", sourceEntityId: calculation.id });
       return { calculation, ledgerEntries: [entry], preview };
     });
   }

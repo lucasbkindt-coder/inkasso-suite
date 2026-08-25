@@ -7,6 +7,8 @@ import { PartyDialog } from "@/components/parties/party-dialog";
 import { type PartyDetail } from "@/components/parties/party-api";
 import { Button } from "@/components/ui/button";
 import { PortalPreviewButton } from "@/components/portal/portal-preview-button";
+import { ActivityList } from "@/components/activity/activity-list";
+import { partyApi } from "@/components/parties/party-api";
 const API = "/api";
 type Party = {
   displayName: string;
@@ -142,6 +144,7 @@ export default function PartyDetailPage() {
           />
         </Section>
       </div>
+      <ActivityList load={(page) => partyApi.activities(id, page)} />
       <PartyDialog
         onOpenChange={setEditOpen}
         onSaved={(updated) => setParty(updated as unknown as Party)}

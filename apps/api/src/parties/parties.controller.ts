@@ -28,6 +28,13 @@ export class PartiesController {
   @Get(":id") @RequireStaffPermissions("debtor:read") findOne(@Param("id", ParseUUIDPipe) id: string) {
     return this.partiesService.findOne(id);
   }
+  @Get(":id/activities") @RequireStaffPermissions("debtor:read") activities(
+    @Param("id", ParseUUIDPipe) id: string,
+    @Query("page") page?: string,
+    @Query("limit") limit?: string,
+  ) {
+    return this.partiesService.activities(id, Math.max(1, Number(page) || 1), Math.min(100, Math.max(1, Number(limit) || 25)));
+  }
   @Post() @RequireStaffPermissions("debtor:create") create(@Body() dto: CreatePartyDto) {
     return this.partiesService.create(dto);
   }

@@ -1,6 +1,7 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from "@nestjs/common";
 import {
   MembershipStatus,
+  ActivityEventType,
   LedgerEntrySide,
   LedgerEntryType,
   PartyRoleType,
@@ -14,6 +15,7 @@ import {
 import { PrismaService } from "../prisma/prisma.service";
 import { TenantContextService } from "../tenant/tenant-context.service";
 import { StaffAuthService } from "../staff-auth/staff-auth.service";
+import { ActivityService } from "../activity/activity.service";
 import { allocateCaseNumber } from "./case-number.service";
 import { CreateCaseDto } from "./dto/create-case.dto";
 import { QueryCasesDto } from "./dto/query-cases.dto";
@@ -35,12 +37,19 @@ const caseDetailInclude = {
   assignedMembership: { include: { user: true } },
 } satisfies Prisma.CaseInclude;
 
+const caseStatusLabel: Record<CaseStatus, string> = {
+  OPEN: "Offen",
+  CLOSED: "Erledigt",
+  CANCELLED: "Storniert",
+};
+
 @Injectable()
 export class CasesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly tenantContext: TenantContextService,
     private readonly staffAuth: StaffAuthService,
+    private readonly activity: ActivityService,
   ) {}
 
   async findAll(query: QueryCasesDto) {
@@ -114,18 +123,24 @@ export class CasesService {
     await this.assertPartyRole(dto.debtorPartyId, tenantId, PartyRoleType.DEBTOR, "Schuldner");
     if (dto.ownerMembershipId) await this.assertOwner(dto.ownerMembershipId, tenantId);
     this.validateClaimDates(dto.claim);
+    const actorMembershipId = this.tenantContext.getStaffContext().tenantMembershipId;
     const created = await this.prisma.$transaction((tx) =>
-      this.createInTransaction(tx, tenantId, dto),
+      this.createInTransaction(tx, tenantId, dto, actorMembershipId),
     );
 
     return this.getCase(created.id, tenantId, true);
   }
 
-  async createInTransaction(tx: Prisma.TransactionClient, tenantId: string, dto: CreateCaseDto) {
+  async createInTransaction(
+    tx: Prisma.TransactionClient,
+    tenantId: string,
+    dto: CreateCaseDto,
+    actorMembershipId?: string,
+  ) {
     const principalAmount = this.toDecimal(dto.claim.principalAmount);
     const year = new Date().getUTCFullYear();
     const number = await allocateCaseNumber(tx, tenantId, year);
-    return tx.case.create({
+    const created = await tx.case.create({
       data: {
         tenantId,
         caseNumber: number.caseNumber,
@@ -162,7 +177,31 @@ export class CasesService {
           },
         },
       },
+      include: { claim: true },
     });
+    if (actorMembershipId) {
+      await this.activity.recordStaffEvent(tx, actorMembershipId, {
+        tenantId,
+        caseId: created.id,
+        partyId: created.debtorPartyId,
+        eventType: ActivityEventType.CASE_CREATED,
+        description: `Inkassoakte ${created.caseNumber} wurde angelegt.`,
+        metadata: { caseNumber: created.caseNumber },
+        sourceEntityType: "Case",
+        sourceEntityId: created.id,
+      });
+      await this.activity.recordStaffEvent(tx, actorMembershipId, {
+        tenantId,
+        caseId: created.id,
+        partyId: created.debtorPartyId,
+        eventType: ActivityEventType.CLAIM_CREATED,
+        description: `Forderung über ${created.claim?.principalAmount.toFixed(2) ?? dto.claim.principalAmount} ${dto.claim.currency.toUpperCase()} wurde angelegt.`,
+        metadata: { claimId: created.claim?.id, amount: created.claim?.principalAmount.toFixed(2) ?? dto.claim.principalAmount },
+        sourceEntityType: "Claim",
+        sourceEntityId: created.claim?.id,
+      });
+    }
+    return created;
   }
 
   async update(id: string, dto: UpdateCaseDto) {
@@ -202,6 +241,16 @@ export class CasesService {
             status: dto.claim.status,
           },
         });
+        await this.activity.recordStaffEvent(tx, this.tenantContext.getStaffContext().tenantMembershipId, {
+          tenantId,
+          caseId: id,
+          partyId: existing.debtorPartyId,
+          eventType: ActivityEventType.CLAIM_UPDATED,
+          description: "Forderung wurde bearbeitet.",
+          metadata: { claimId: existing.claim.id, changedFields: Object.keys(dto.claim) },
+          sourceEntityType: "Claim",
+          sourceEntityId: existing.claim.id,
+        });
       }
 
       await tx.case.update({
@@ -238,9 +287,21 @@ export class CasesService {
   async assign(id: string, membershipId: string | null) {
     const tenantId = await this.tenantContext.getTenantId();
     this.staffAuth.requirePermission(this.tenantContext.getStaffContext(), "case:assign");
-    await this.getCase(id, tenantId, true);
+    const existing = await this.getCase(id, tenantId, true);
     if (membershipId) await this.assertOwner(membershipId, tenantId);
-    await this.prisma.case.update({ where: { id }, data: { assignedMembershipId: membershipId } });
+    await this.prisma.$transaction(async (tx) => {
+      await tx.case.update({ where: { id }, data: { assignedMembershipId: membershipId } });
+      await this.activity.recordStaffEvent(tx, this.tenantContext.getStaffContext().tenantMembershipId, {
+        tenantId,
+        caseId: id,
+        partyId: existing.debtorPartyId,
+        eventType: ActivityEventType.CASE_ASSIGNEE_CHANGED,
+        description: "Sachbearbeitung wurde geändert.",
+        metadata: { previousMembershipId: existing.assignedMembershipId, newMembershipId: membershipId },
+        sourceEntityType: "Case",
+        sourceEntityId: id,
+      });
+    });
     return this.getCase(id, tenantId, true);
   }
 
@@ -258,8 +319,27 @@ export class CasesService {
     if (!this.allowedStatusTransitions(caseRecord.status).includes(targetStatus)) {
       throw new ConflictException(`Der Status ${targetStatus} ist aus ${caseRecord.status} nicht zulässig.`);
     }
-    await this.prisma.case.update({ where: { id }, data: { status: targetStatus, closedAt: targetStatus === "CLOSED" ? new Date() : null } });
+    await this.prisma.$transaction(async (tx) => {
+      await tx.case.update({ where: { id }, data: { status: targetStatus, closedAt: targetStatus === "CLOSED" ? new Date() : null } });
+      await this.activity.recordStaffEvent(tx, this.tenantContext.getStaffContext().tenantMembershipId, {
+        tenantId,
+        caseId: id,
+        partyId: caseRecord.debtorPartyId,
+        eventType: ActivityEventType.CASE_STATUS_CHANGED,
+        description: `Aktenstatus wurde von ${caseStatusLabel[caseRecord.status]} auf ${caseStatusLabel[targetStatus]} geändert.`,
+        metadata: { fromStatus: caseRecord.status, toStatus: targetStatus },
+        sourceEntityType: "Case",
+        sourceEntityId: id,
+      });
+    });
     return this.getCase(id, tenantId, true);
+  }
+
+  async activities(id: string, page = 1, limit = 25) {
+    const tenantId = await this.tenantContext.getTenantId();
+    this.staffAuth.requirePermission(this.tenantContext.getStaffContext(), "case:read");
+    await this.getCase(id, tenantId, true);
+    return this.activity.listForCase(tenantId, id, page, limit);
   }
 
   private async assertPartyRole(

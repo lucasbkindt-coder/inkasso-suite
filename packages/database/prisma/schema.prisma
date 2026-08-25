@@ -251,6 +251,46 @@ enum DocumentDeliveryStatus {
   SKIPPED
 }
 
+enum ActivityActorType {
+  STAFF
+  PORTAL
+  SYSTEM
+}
+
+enum ActivityEventType {
+  PARTY_CREATED
+  PARTY_UPDATED
+  PARTY_ADDRESS_UPDATED
+  PARTY_CONTACT_UPDATED
+  CASE_CREATED
+  CASE_STATUS_CHANGED
+  CASE_ASSIGNEE_CHANGED
+  CLAIM_CREATED
+  CLAIM_UPDATED
+  COST_CREATED
+  PAYMENT_CREATED
+  PAYMENT_REVERSED
+  DOCUMENT_CREATED
+  DOCUMENT_VOIDED
+  DOCUMENT_EMAIL_SENT
+  DOCUMENT_EMAIL_FAILED
+  DOCUMENT_EMAIL_SKIPPED
+  TASK_CREATED
+  TASK_UPDATED
+  TASK_COMPLETED
+  INSTALLMENT_REQUEST_CREATED
+  INSTALLMENT_REQUEST_REVIEWED
+  INSTALLMENT_REQUEST_APPROVED
+  INSTALLMENT_REQUEST_REJECTED
+  INSTALLMENT_PLAN_CREATED
+  INSTALLMENT_PLAN_ACTIVATED
+  INSTALLMENT_PLAN_CANCELLED
+  INSTALLMENT_PLAN_DEFAULTED
+  INSTALLMENT_PLAN_COMPLETED
+  PORTAL_ACCOUNT_CREATED
+  PORTAL_ACTIVATION_ISSUED
+}
+
 model User {
   id                 String    @id @default(uuid()) @db.Uuid
   email              String    @unique
@@ -361,6 +401,7 @@ model Tenant {
   installmentPlans    InstallmentPlan[]
   installmentPlanItems InstallmentPlanItem[]
   staffSessions       StaffSession[]
+  activityEvents      ActivityEvent[]
 
   @@index([deletedAt])
 }
@@ -399,6 +440,7 @@ model Case {
   acceptedSubmissions ClientSubmission[] @relation("AcceptedSubmissionCase")
   installmentRequests InstallmentRequest[]
   installmentPlans    InstallmentPlan[]
+  activityEvents      ActivityEvent[]
 
   @@unique([tenantId, caseNumber])
   @@unique([tenantId, sequenceYear, sequenceNumber])
@@ -733,6 +775,7 @@ model Party {
   portalAccounts     PortalAccount[]
   installmentRequests InstallmentRequest[]
   installmentPlans    InstallmentPlan[]
+  activityEvents      ActivityEvent[]
 
   @@index([tenantId, deletedAt, displayName])
   @@index([tenantId, type, deletedAt])
@@ -838,6 +881,7 @@ model PortalAccount {
   party       Party              @relation(fields: [partyId], references: [id], onDelete: Restrict)
   activations PortalActivation[]
   sessions    PortalSession[]
+  activityEvents ActivityEvent[]
 
   @@unique([tenantId, partyId, portalType])
   @@index([tenantId, portalType, status])
@@ -872,6 +916,35 @@ model PortalSession {
 
   @@index([portalAccountId, revokedAt, expiresAt])
   @@index([expiresAt])
+}
+
+model ActivityEvent {
+  id                   String            @id @default(uuid()) @db.Uuid
+  tenantId             String            @db.Uuid
+  caseId               String?           @db.Uuid
+  partyId              String?           @db.Uuid
+  actorType            ActivityActorType
+  actorMembershipId    String?           @db.Uuid
+  actorPortalAccountId String?           @db.Uuid
+  eventType            ActivityEventType
+  title                String
+  description          String?
+  metadata             Json?
+  sourceEntityType     String?
+  sourceEntityId       String?
+  createdAt            DateTime          @default(now())
+
+  tenant             Tenant            @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  case               Case?             @relation(fields: [caseId], references: [id], onDelete: Restrict)
+  party              Party?            @relation(fields: [partyId], references: [id], onDelete: Restrict)
+  actorMembership    TenantMembership? @relation("ActivityActorMembership", fields: [actorMembershipId], references: [id], onDelete: Restrict)
+  actorPortalAccount PortalAccount?    @relation(fields: [actorPortalAccountId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId, createdAt])
+  @@index([caseId, createdAt])
+  @@index([partyId, createdAt])
+  @@index([actorMembershipId])
+  @@index([actorPortalAccountId])
 }
 
 model Person {
@@ -1011,6 +1084,7 @@ model TenantMembership {
   staffSessions      StaffSession[]
   createdInstallmentPlans InstallmentPlan[] @relation("CreatedInstallmentPlans")
   cancelledInstallmentPlans InstallmentPlan[] @relation("CancelledInstallmentPlans")
+  activityEvents      ActivityEvent[]      @relation("ActivityActorMembership")
 
   @@unique([tenantId, userId])
   @@index([userId, deletedAt])

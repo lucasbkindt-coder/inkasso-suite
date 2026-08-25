@@ -29,6 +29,7 @@ import type {
 } from "@/types/client-submission";
 import type { InstallmentRequest, InstallmentRequestStatus } from "@/types/installment-request";
 import type { InstallmentPlan } from "@/types/installment-plan";
+import type { ActivityItem } from "@/components/activity/activity-list";
 
 const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "/api";
 
@@ -171,6 +172,8 @@ export const caseApi = {
       body: JSON.stringify(payload),
     }),
   getCase: (id: string) => request<Case>(`/cases/${id}`),
+  getCaseActivities: (id: string, page = 1) =>
+    request<{ items: ActivityItem[]; page: number; totalPages: number }>(`/cases/${id}/activities?${queryString({ page, limit: 25 })}`),
   getCaseByNumber: (caseNumber: string) =>
     request<Case>(`/cases/by-number?${queryString({ caseNumber })}`),
   createCase: (payload: CreateCaseInput) =>

@@ -7,6 +7,7 @@ import {
 } from "@nestjs/common";
 import {
   PartyRoleType,
+  ActivityEventType,
   PortalAccountStatus,
   PortalAccountType,
   Prisma,
@@ -15,6 +16,7 @@ import argon2 from "argon2";
 import { createHash, randomBytes, randomInt, timingSafeEqual } from "node:crypto";
 
 import { PrismaService } from "../prisma/prisma.service";
+import { ActivityService } from "../activity/activity.service";
 import { ActivatePortalAccountDto } from "./dto/activate-portal-account.dto";
 import { LoginPortalAccountDto } from "./dto/login-portal-account.dto";
 
@@ -39,7 +41,7 @@ type IssueActivationOptions = {
 export class PortalAuthService {
   private dummyPasswordHash: string | undefined;
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService, private readonly activity: ActivityService) {}
 
   async ensurePortalAccountForParty(
     tenantId: string,
@@ -54,14 +56,16 @@ export class PortalAuthService {
 
     for (let attempt = 0; attempt < 3; attempt += 1) {
       try {
-        const account = await this.prisma.portalAccount.create({
-          data: {
+        const account = await this.prisma.$transaction(async (tx) => {
+          const created = await tx.portalAccount.create({ data: {
             tenantId,
             partyId,
             portalType,
             status: PortalAccountStatus.PENDING_ACTIVATION,
             loginIdentifier: await this.createLoginIdentifier(),
-          },
+          } });
+          await this.activity.recordSystemEvent(tx, { tenantId, partyId, eventType: ActivityEventType.PORTAL_ACCOUNT_CREATED, description: "Portalzugang wurde angelegt.", metadata: { portalType }, sourceEntityType: "PortalAccount", sourceEntityId: created.id });
+          return created;
         });
         return { account, created: true };
       } catch (error) {
@@ -82,7 +86,7 @@ export class PortalAuthService {
   ) {
     const account = await this.prisma.portalAccount.findFirst({
       where: { id: portalAccountId, tenantId },
-      select: { id: true, loginIdentifier: true, status: true },
+      select: { id: true, partyId: true, loginIdentifier: true, status: true },
     });
     if (!account) throw new NotFoundException("Portalzugang wurde nicht gefunden.");
     if (account.status !== PortalAccountStatus.PENDING_ACTIVATION) {
@@ -99,13 +103,15 @@ export class PortalAuthService {
           data: { invalidatedAt: now },
         });
       }
-      return tx.portalActivation.create({
+      const created = await tx.portalActivation.create({
         data: {
           portalAccountId: account.id,
           secretHash: this.hashSecret(activationCode),
           expiresAt,
         },
       });
+      await this.activity.recordSystemEvent(tx, { tenantId, partyId: account.partyId, eventType: ActivityEventType.PORTAL_ACTIVATION_ISSUED, description: "Portalaktivierung wurde ausgestellt.", metadata: { portalAccountId: account.id }, sourceEntityType: "PortalActivation", sourceEntityId: created.id });
+      return created;
     });
 
     return {

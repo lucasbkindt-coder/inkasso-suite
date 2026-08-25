@@ -37,6 +37,15 @@ export class CasesController {
     return this.casesService.findOne(id);
   }
 
+  @Get(":id/activities")
+  activities(
+    @Param("id", ParseUUIDPipe) id: string,
+    @Query("page") page?: string,
+    @Query("limit") limit?: string,
+  ) {
+    return this.casesService.activities(id, Math.max(1, Number(page) || 1), Math.min(100, Math.max(1, Number(limit) || 25)));
+  }
+
   @Get(":id/status-transitions")
   statusTransitions(@Param("id", ParseUUIDPipe) id: string) {
     return this.casesService.availableStatusTransitions(id);

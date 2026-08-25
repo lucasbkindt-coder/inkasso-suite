@@ -5,6 +5,7 @@ import { PortalPreviewService, type PortalType } from "../portal-preview/portal-
 import { PortalAuthService, type PortalAuthContext } from "./portal-auth.service";
 
 export type PortalAccessContext = Omit<PortalAuthContext, "portalAccountId"> & {
+  portalAccountId?: string;
   mode: "AUTHENTICATED" | "PREVIEW";
   caseId?: string;
   returnUrl?: string;
@@ -39,6 +40,7 @@ export class PortalAccessService {
     );
     return {
       tenantId: context.tenantId,
+      portalAccountId: context.portalAccountId,
       portalType: context.portalType,
       partyId: context.partyId,
       mode: "AUTHENTICATED",

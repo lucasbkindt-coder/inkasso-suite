@@ -1,0 +1,151 @@
+import { Injectable } from "@nestjs/common";
+import {
+  ActivityActorType,
+  ActivityEventType,
+  Prisma,
+} from "@prisma/client";
+
+import { PrismaService } from "../prisma/prisma.service";
+
+type DbClient = Prisma.TransactionClient | PrismaService;
+type EventInput = {
+  tenantId: string;
+  caseId?: string;
+  partyId?: string;
+  eventType: ActivityEventType;
+  title?: string;
+  description?: string;
+  metadata?: Prisma.InputJsonValue;
+  sourceEntityType?: string;
+  sourceEntityId?: string;
+};
+
+const TITLES: Record<ActivityEventType, string> = {
+  PARTY_CREATED: "Partei angelegt",
+  PARTY_UPDATED: "Partei bearbeitet",
+  PARTY_ADDRESS_UPDATED: "Anschrift aktualisiert",
+  PARTY_CONTACT_UPDATED: "Kontaktdaten aktualisiert",
+  CASE_CREATED: "Inkassoakte angelegt",
+  CASE_STATUS_CHANGED: "Aktenstatus geändert",
+  CASE_ASSIGNEE_CHANGED: "Sachbearbeitung geändert",
+  CLAIM_CREATED: "Forderung angelegt",
+  CLAIM_UPDATED: "Forderung bearbeitet",
+  COST_CREATED: "Kosten gebucht",
+  PAYMENT_CREATED: "Zahlung erfasst",
+  PAYMENT_REVERSED: "Zahlung storniert",
+  DOCUMENT_CREATED: "Dokument erstellt",
+  DOCUMENT_VOIDED: "Dokument annulliert",
+  DOCUMENT_EMAIL_SENT: "Forderungs-E-Mail versendet",
+  DOCUMENT_EMAIL_FAILED: "Forderungs-E-Mail fehlgeschlagen",
+  DOCUMENT_EMAIL_SKIPPED: "Forderungs-E-Mail übersprungen",
+  TASK_CREATED: "Aufgabe angelegt",
+  TASK_UPDATED: "Aufgabe bearbeitet",
+  TASK_COMPLETED: "Aufgabe erledigt",
+  INSTALLMENT_REQUEST_CREATED: "Ratenanfrage eingegangen",
+  INSTALLMENT_REQUEST_REVIEWED: "Ratenanfrage geprüft",
+  INSTALLMENT_REQUEST_APPROVED: "Ratenanfrage genehmigt",
+  INSTALLMENT_REQUEST_REJECTED: "Ratenanfrage abgelehnt",
+  INSTALLMENT_PLAN_CREATED: "Ratenplan erstellt",
+  INSTALLMENT_PLAN_ACTIVATED: "Ratenplan aktiviert",
+  INSTALLMENT_PLAN_CANCELLED: "Ratenplan storniert",
+  INSTALLMENT_PLAN_DEFAULTED: "Ratenplan als gescheitert markiert",
+  INSTALLMENT_PLAN_COMPLETED: "Ratenplan abgeschlossen",
+  PORTAL_ACCOUNT_CREATED: "Portalzugang angelegt",
+  PORTAL_ACTIVATION_ISSUED: "Portalaktivierung ausgestellt",
+};
+
+@Injectable()
+export class ActivityService {
+  constructor(private readonly prisma: PrismaService) {}
+
+  recordStaffEvent(client: DbClient, membershipId: string, input: EventInput) {
+    return this.record(client, {
+      ...input,
+      actorType: ActivityActorType.STAFF,
+      actorMembershipId: membershipId,
+    });
+  }
+
+  recordPortalEvent(client: DbClient, portalAccountId: string, input: EventInput) {
+    return this.record(client, {
+      ...input,
+      actorType: ActivityActorType.PORTAL,
+      actorPortalAccountId: portalAccountId,
+    });
+  }
+
+  recordSystemEvent(client: DbClient, input: EventInput) {
+    return this.record(client, { ...input, actorType: ActivityActorType.SYSTEM });
+  }
+
+  async listForCase(tenantId: string, caseId: string, page = 1, limit = 25) {
+    return this.list(tenantId, { caseId }, page, limit);
+  }
+
+  async listForParty(tenantId: string, partyId: string, page = 1, limit = 25) {
+    return this.list(tenantId, { partyId }, page, limit);
+  }
+
+  private record(
+    client: DbClient,
+    input: EventInput & {
+      actorType: ActivityActorType;
+      actorMembershipId?: string;
+      actorPortalAccountId?: string;
+    },
+  ) {
+    return client.activityEvent.create({
+      data: {
+        tenantId: input.tenantId,
+        caseId: input.caseId,
+        partyId: input.partyId,
+        actorType: input.actorType,
+        actorMembershipId: input.actorMembershipId,
+        actorPortalAccountId: input.actorPortalAccountId,
+        eventType: input.eventType,
+        title: input.title ?? TITLES[input.eventType],
+        description: input.description,
+        metadata: input.metadata,
+        sourceEntityType: input.sourceEntityType,
+        sourceEntityId: input.sourceEntityId,
+      },
+    });
+  }
+
+  private async list(
+    tenantId: string,
+    reference: Pick<Prisma.ActivityEventWhereInput, "caseId" | "partyId">,
+    page: number,
+    limit: number,
+  ) {
+    const [items, total] = await this.prisma.$transaction([
+      this.prisma.activityEvent.findMany({
+        where: { tenantId, ...reference },
+        include: {
+          actorMembership: { select: { user: { select: { displayName: true, email: true } } } },
+          actorPortalAccount: { select: { portalType: true } },
+        },
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      this.prisma.activityEvent.count({ where: { tenantId, ...reference } }),
+    ]);
+    return {
+      items: items.map((event) => ({
+        ...event,
+        actor: event.actorType === ActivityActorType.STAFF
+          ? event.actorMembership
+            ? event.actorMembership.user.displayName ?? event.actorMembership.user.email
+            : "Mitarbeiter"
+          : event.actorType === ActivityActorType.PORTAL
+            ? event.actorPortalAccount?.portalType === "CLIENT" ? "Mandantenportal" : "Schuldnerportal"
+            : "System",
+      })),
+      page,
+      limit,
+      total,
+      totalPages: Math.ceil(total / limit),
+    };
+  }
+}

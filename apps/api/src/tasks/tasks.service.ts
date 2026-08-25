@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
-import { MembershipStatus, Prisma, TaskStatus, TaskType } from "@prisma/client";
+import { ActivityEventType, MembershipStatus, Prisma, TaskStatus, TaskType } from "@prisma/client";
+import { ActivityService } from "../activity/activity.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { TenantContextService } from "../tenant/tenant-context.service";
 import { CreateTaskDto } from "./dto/create-task.dto";
@@ -10,7 +11,7 @@ const detailInclude = { case: { select: { id: true, caseNumber: true } }, assign
 
 @Injectable()
 export class TasksService {
-  constructor(private readonly prisma: PrismaService, private readonly tenant: TenantContextService) {}
+  constructor(private readonly prisma: PrismaService, private readonly tenant: TenantContextService, private readonly activity: ActivityService) {}
 
   async findAll(query: QueryTasksDto) {
     const tenantId = await this.tenant.getTenantId();
@@ -33,19 +34,28 @@ export class TasksService {
     this.validateDates(dto.type, dto.dueAt, dto.followUpAt);
     if (dto.caseId) await this.assertCase(dto.caseId, tenantId);
     if (dto.assignedMembershipId) await this.assertMembership(dto.assignedMembershipId, tenantId);
-    return this.prisma.caseTask.create({ data: { tenantId, caseId: dto.caseId, type: dto.type, priority: dto.priority, title: dto.title.trim(), description: dto.description, dueAt: dto.dueAt ? new Date(dto.dueAt) : undefined, followUpAt: dto.followUpAt ? new Date(dto.followUpAt) : undefined, assignedMembershipId: dto.assignedMembershipId }, include: detailInclude });
+    return this.prisma.$transaction(async (tx) => {
+      const task = await tx.caseTask.create({ data: { tenantId, caseId: dto.caseId, type: dto.type, priority: dto.priority, title: dto.title.trim(), description: dto.description, dueAt: dto.dueAt ? new Date(dto.dueAt) : undefined, followUpAt: dto.followUpAt ? new Date(dto.followUpAt) : undefined, assignedMembershipId: dto.assignedMembershipId, createdByMembershipId: this.tenant.getStaffContext().tenantMembershipId }, include: detailInclude });
+      await this.record(tx, tenantId, task.caseId, ActivityEventType.TASK_CREATED, `Aufgabe „${task.title}“ wurde angelegt.`, { taskId: task.id, type: task.type });
+      return task;
+    });
   }
   async update(id: string, dto: UpdateTaskDto) {
     const tenantId = await this.tenant.getTenantId(); const current = await this.findTask(id, tenantId);
     if (dto.assignedMembershipId) await this.assertMembership(dto.assignedMembershipId, tenantId);
     const type = dto.type ?? current.type; const dueAt = dto.dueAt === undefined ? current.dueAt?.toISOString() : dto.dueAt; const followUpAt = dto.followUpAt === undefined ? current.followUpAt?.toISOString() : dto.followUpAt;
     this.validateDates(type, dueAt, followUpAt);
-    return this.prisma.caseTask.update({ where: { id }, data: { type: dto.type, priority: dto.priority, title: dto.title?.trim(), description: dto.description, dueAt: dto.dueAt === undefined ? undefined : new Date(dto.dueAt), followUpAt: dto.followUpAt === undefined ? undefined : new Date(dto.followUpAt), assignedMembershipId: dto.assignedMembershipId }, include: detailInclude });
+    return this.prisma.$transaction(async (tx) => {
+      const task = await tx.caseTask.update({ where: { id }, data: { type: dto.type, priority: dto.priority, title: dto.title?.trim(), description: dto.description, dueAt: dto.dueAt === undefined ? undefined : new Date(dto.dueAt), followUpAt: dto.followUpAt === undefined ? undefined : new Date(dto.followUpAt), assignedMembershipId: dto.assignedMembershipId }, include: detailInclude });
+      await this.record(tx, tenantId, task.caseId, ActivityEventType.TASK_UPDATED, `Aufgabe „${task.title}“ wurde bearbeitet.`, { taskId: task.id, changedFields: Object.keys(dto) });
+      return task;
+    });
   }
   async complete(id: string) { return this.transition(id, TaskStatus.COMPLETED); }
   async reopen(id: string) { return this.transition(id, TaskStatus.OPEN); }
   async cancel(id: string) { return this.transition(id, TaskStatus.CANCELLED); }
-  private async transition(id: string, status: TaskStatus) { const tenantId = await this.tenant.getTenantId(); await this.findTask(id, tenantId); const now = new Date(); return this.prisma.caseTask.update({ where: { id }, data: { status, completedAt: status === TaskStatus.COMPLETED ? now : null, cancelledAt: status === TaskStatus.CANCELLED ? now : null }, include: detailInclude }); }
+  private async transition(id: string, status: TaskStatus) { const tenantId = await this.tenant.getTenantId(); await this.findTask(id, tenantId); const now = new Date(); return this.prisma.$transaction(async (tx) => { const task = await tx.caseTask.update({ where: { id }, data: { status, completedAt: status === TaskStatus.COMPLETED ? now : null, cancelledAt: status === TaskStatus.CANCELLED ? now : null }, include: detailInclude }); if (status === TaskStatus.COMPLETED) await this.record(tx, tenantId, task.caseId, ActivityEventType.TASK_COMPLETED, `Aufgabe „${task.title}“ wurde erledigt.`, { taskId: task.id }); else await this.record(tx, tenantId, task.caseId, ActivityEventType.TASK_UPDATED, `Aufgabenstatus wurde auf ${status} gesetzt.`, { taskId: task.id, status }); return task; }); }
+  private async record(tx: Prisma.TransactionClient, tenantId: string, caseId: string | null, eventType: ActivityEventType, description: string, metadata: Prisma.InputJsonValue) { if (!caseId) return; const caseRecord = await tx.case.findFirst({ where: { id: caseId, tenantId }, select: { debtorPartyId: true } }); if (!caseRecord) return; await this.activity.recordStaffEvent(tx, this.tenant.getStaffContext().tenantMembershipId, { tenantId, caseId, partyId: caseRecord.debtorPartyId, eventType, description, metadata, sourceEntityType: "CaseTask", sourceEntityId: String((metadata as { taskId?: string }).taskId ?? "") }); }
   private validateDates(type: TaskType, dueAt?: string | null, followUpAt?: string | null) { if (type === TaskType.DEADLINE && !dueAt) throw new BadRequestException("Für eine Frist ist dueAt erforderlich."); if (type === TaskType.FOLLOW_UP && !dueAt && !followUpAt) throw new BadRequestException("Für eine Wiedervorlage ist dueAt oder followUpAt erforderlich."); }
   private async assertCase(id: string, tenantId: string) { const value = await this.prisma.case.findFirst({ where: { id, tenantId, deletedAt: null }, select: { id: true } }); if (!value) throw new BadRequestException("Die Akte gehört nicht zum aktiven Mandanten."); }
   private async assertMembership(id: string, tenantId: string) { const value = await this.prisma.tenantMembership.findFirst({ where: { id, tenantId, deletedAt: null, status: MembershipStatus.ACTIVE }, select: { id: true } }); if (!value) throw new BadRequestException("Die zugewiesene Mitgliedschaft gehört nicht zum aktiven Mandanten."); }

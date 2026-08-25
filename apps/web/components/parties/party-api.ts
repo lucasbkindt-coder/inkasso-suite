@@ -56,4 +56,6 @@ export const partyApi = {
     request<PartyDetail>("/parties", { method: "POST", body: JSON.stringify(data) }),
   update: (id: string, data: PartyInput) =>
     request<PartyDetail>(`/parties/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+  activities: (id: string, page = 1) =>
+    request<{ items: import("@/components/activity/activity-list").ActivityItem[]; page: number; totalPages: number }>(`/parties/${id}/activities?page=${page}&limit=25`),
 };

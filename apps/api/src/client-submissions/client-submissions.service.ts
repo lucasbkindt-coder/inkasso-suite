@@ -402,7 +402,7 @@ export class ClientSubmissionsService {
           currency: submission.currency,
           description: submission.claimDescription ?? undefined,
         },
-      });
+      }, reviewedByMembershipId);
       const now = new Date();
       const accepted = await tx.clientSubmission.update({
         where: { id },
