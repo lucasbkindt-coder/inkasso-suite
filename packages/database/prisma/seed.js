@@ -218,7 +218,11 @@ async function main() {
   await seedDocumentTemplates(tenant.id);
   await prisma.tenantDocumentSettings.upsert({
     where: { tenantId: tenant.id },
-    update: {},
+    update: {
+      collectionRegistrationAuthority: "Landesamt für Bürger- und Ordnungsangelegenheiten",
+      collectionRegistrationAddress: "Puttkamerstraße 16–18, 10969 Berlin",
+      collectionRegistrationContact: "https://www.berlin.de/labo/",
+    },
     create: {
       tenantId: tenant.id,
       companyName: "payveo Entwicklungsumgebung",
@@ -227,6 +231,9 @@ async function main() {
       city: "Entwicklungsort",
       country: "DE",
       documentFooter: "Lokale Entwicklungsdaten – vor produktivem Versand konfigurieren.",
+      collectionRegistrationAuthority: "Landesamt für Bürger- und Ordnungsangelegenheiten",
+      collectionRegistrationAddress: "Puttkamerstraße 16–18, 10969 Berlin",
+      collectionRegistrationContact: "https://www.berlin.de/labo/",
     },
   });
 }
@@ -292,14 +299,41 @@ async function seedDocumentTemplates(tenantId) {
       "Vollstreckungsankündigung zu {{case.caseNumber}}",
       "Sehr geehrte Damen und Herren,\n\nbitte zahlen Sie den aktuellen Gesamtbetrag bis spätestens {{document.paymentDueDate}}. Bei Nichtzahlung können Vollstreckungsmaßnahmen auf Grundlage eines dokumentierten Titels veranlasst werden.\n\nMit freundlichen Grüßen\npayveo",
     ],
+    ["payment-request-consumer", "Zahlungsaufforderung – Privatperson", "PAYMENT_REQUEST", "Zahlungsaufforderung zu {{case.caseNumber}}", "Sehr geehrte Damen und Herren,\n\nbitte beachten Sie die nachstehende Forderungsaufstellung und die Zahlungsinformationen.\n\nMit freundlichen Grüßen\npayveo"],
+    ["payment-request-business", "Zahlungsaufforderung – Unternehmen", "PAYMENT_REQUEST", "Zahlungsaufforderung zu {{case.caseNumber}}", "Sehr geehrte Damen und Herren,\n\nbitte beachten Sie die nachstehende Forderungsaufstellung und die Zahlungsinformationen.\n\nMit freundlichen Grüßen\npayveo"],
+    ["title-notification", "Mitteilung der Titulierung", "TITLE_NOTIFICATION", "Mitteilung der Titulierung zu {{case.caseNumber}}", "Sehr geehrte Damen und Herren,\n\nfür die Forderungsangelegenheit liegt ein dokumentierter Vollstreckungstitel vor. Bitte gleichen Sie den aktuellen offenen Betrag aus.\n\nMit freundlichen Grüßen\npayveo"],
+    ["claim-statement", "Forderungsaufstellung", "CLAIM_STATEMENT", "Forderungsaufstellung zu {{case.caseNumber}}", "Sehr geehrte Damen und Herren,\n\nanbei erhalten Sie den aktuellen Forderungsstand.\n\nMit freundlichen Grüßen\npayveo"],
+    ["case-settled", "Erledigterklärung", "CASE_SETTLED", "Erledigung zu {{case.caseNumber}}", "Sehr geehrte Damen und Herren,\n\ndie Forderungsangelegenheit ist nach unserem aktuellen Forderungskonto ausgeglichen.\n\nMit freundlichen Grüßen\npayveo"],
+    ["installment-agreement", "Ratenplanbestätigung", "PAYMENT_PLAN", "Ratenplan zu {{case.caseNumber}}", "Sehr geehrte Damen und Herren,\n\ndie vereinbarte Ratenzahlung richtet sich nach dem aktiven Ratenplan. Bitte beachten Sie die vereinbarten Fälligkeiten.\n\nMit freundlichen Grüßen\npayveo"],
+    ["installment-default-notice", "Mitteilung Ratenplan-Ausfall", "PAYMENT_PLAN", "Ratenplan zu {{case.caseNumber}}", "Sehr geehrte Damen und Herren,\n\nder Ratenplan ist nicht mehr aktiv. Bitte beachten Sie den aktuellen Forderungsstand.\n\nMit freundlichen Grüßen\npayveo"],
+    ["enforcement-order", "Vollstreckungsauftragsdaten", "ENFORCEMENT_ORDER", "Vollstreckungsauftrag zu {{case.caseNumber}}", "Interne strukturierte Vollstreckungsauftragsdaten auf Grundlage eines aktiven Titels. Dieses Dokument ersetzt kein amtliches Formular.\n\nAktenzeichen: {{case.caseNumber}}"],
+    ["enforcement-cover-letter", "Anschreiben Vollstreckung", "ENFORCEMENT_COVER_LETTER", "Anschreiben zu {{case.caseNumber}}", "Sehr geehrte Damen und Herren,\n\nanbei übermitteln wir die strukturierten Unterlagen zur weiteren Bearbeitung.\n\nMit freundlichen Grüßen\npayveo"],
+    ["garnishment-application", "Pfändungsunterlagen", "GARNISHMENT_APPLICATION", "Pfändungsunterlagen zu {{case.caseNumber}}", "Interne strukturierte Datenbasis für Pfändungsunterlagen. Dieses Dokument ersetzt keinen amtlichen Antrag.\n\nAktenzeichen: {{case.caseNumber}}"],
   ];
+  const professionalBodies = {
+    "payment-request-consumer": "Sehr geehrte Damen und Herren,\n\nwir wurden vom Auftraggeber mit der Einziehung der Forderung beauftragt. Bitte entnehmen Sie die Entstehung, Fälligkeit und den aktuellen Forderungsstand der nachfolgenden Aufstellung.\n\nWir bitten Sie, den ausgewiesenen Gesamtbetrag bis zur angegebenen Frist auszugleichen. Bei Einwendungen oder wenn Sie eine Ratenzahlung anfragen möchten, kontaktieren Sie uns bitte rechtzeitig.\n\nMit freundlichen Grüßen\npayveo",
+    "payment-request-business": "Sehr geehrte Damen und Herren,\n\nwir machen im Auftrag unseres Auftraggebers die fällige Forderung geltend. Der aktuelle Forderungsstand einschließlich der angefallenen Kosten und Zinsen ist nachfolgend ausgewiesen.\n\nBitte veranlassen Sie den vollständigen Ausgleich bis zur angegebenen Frist unter Angabe des Aktenzeichens.\n\nMit freundlichen Grüßen\npayveo",
+    "payment-reminder": "Sehr geehrte Damen und Herren,\n\nauf unsere vorherige Zahlungsaufforderung ist bislang kein vollständiger Ausgleich festgestellt worden. Der aktuelle Forderungsstand ist nachfolgend aufgeführt.\n\nWir bitten Sie erneut, den Gesamtbetrag fristgerecht zu zahlen. Andernfalls kann eine weitere Rechtsverfolgung geprüft werden.\n\nMit freundlichen Grüßen\npayveo",
+    "court-dunning-notice": "Sehr geehrte Damen und Herren,\n\ntrotz der bisherigen Korrespondenz besteht die Forderung weiterhin. Bitte beachten Sie den nachfolgend ausgewiesenen Forderungsstand und die Zahlungsfrist.\n\nNach fruchtlosem Ablauf der Frist kann ein gerichtliches Mahnverfahren geprüft oder veranlasst werden; dadurch können weitere gesetzlich erstattungsfähige Kosten entstehen.\n\nMit freundlichen Grüßen\npayveo",
+    "title-notification": "Sehr geehrte Damen und Herren,\n\nin der Forderungsangelegenheit liegt ein Vollstreckungstitel vor. Die maßgeblichen Titeldaten und der aktuelle Forderungsstand werden im Schreiben ausgewiesen.\n\nBitte gleichen Sie den offenen Betrag innerhalb der genannten Frist aus. Ein vollstreckbarer Titel kann grundsätzlich Vollstreckungsmaßnahmen ermöglichen.\n\nMit freundlichen Grüßen\npayveo",
+    "enforcement-notice": "Sehr geehrte Damen und Herren,\n\nauf Grundlage des aktiven Vollstreckungstitels besteht die Forderung weiterhin. Der aktuelle Forderungsstand und die Zahlungsfrist sind nachfolgend aufgeführt.\n\nNach ergebnislosem Fristablauf können geeignete Zwangsvollstreckungsmaßnahmen im gesetzlichen Rahmen veranlasst werden.\n\nMit freundlichen Grüßen\npayveo",
+    "case-settled": "Sehr geehrte Damen und Herren,\n\nwir bestätigen, dass die Forderungsangelegenheit nach dem aktuellen Buchungsstand vollständig ausgeglichen ist.\n\nDie Angelegenheit wird bei payveo als erledigt geführt. Diese Bestätigung betrifft ausschließlich den dokumentierten Forderungsstand.\n\nMit freundlichen Grüßen\npayveo",
+    "installment-agreement": "Sehr geehrte Damen und Herren,\n\nwir bestätigen die vereinbarte Ratenzahlung. Gesamtplanbetrag, Ratenhöhe und Fälligkeiten ergeben sich aus der nachfolgenden Ratenübersicht.\n\nBitte verwenden Sie bei jeder Zahlung das Aktenzeichen als Verwendungszweck und halten Sie die vereinbarten Fälligkeiten ein.\n\nMit freundlichen Grüßen\npayveo",
+    "installment-default-notice": "Sehr geehrte Damen und Herren,\n\ndie Ratenvereinbarung wird aktuell als ausgefallen geführt. Der aktuelle offene Forderungsstand und die Zahlungsfrist sind nachfolgend ausgewiesen.\n\nBitte gleichen Sie den Betrag fristgerecht aus. Andernfalls kann die weitere Rechtsverfolgung geprüft werden.\n\nMit freundlichen Grüßen\npayveo",
+    "claim-statement": "Sehr geehrte Damen und Herren,\n\nnachfolgend erhalten Sie die aktuelle Forderungsaufstellung zum Aktenzeichen {{case.caseNumber}}. Die Übersicht bildet den Buchungs- und Forderungsstand zum Stichtag ab.\n\nMit freundlichen Grüßen\npayveo",
+    "enforcement-order": "Sehr geehrte Damen und Herren,\n\ndieses Schreiben enthält die strukturierten Angaben zur Vorbereitung einer Vollstreckungsmaßnahme. Maßgebliche amtliche Formulare und deren gesetzliche Anforderungen bleiben unberührt.\n\nMit freundlichen Grüßen\npayveo",
+    "enforcement-cover-letter": "Sehr geehrte Damen und Herren,\n\nbeigefügt übermitteln wir die Unterlagen zur Bearbeitung der angelegten Vollstreckungsmaßnahme. Titel, Forderungsstand und Aktenzeichen werden im Schreiben konkret ausgewiesen.\n\nFür Rückfragen stehen wir gerne zur Verfügung.\n\nMit freundlichen Grüßen\npayveo",
+    "garnishment-application": "Sehr geehrte Damen und Herren,\n\ndieses Schreiben dient als strukturierte Begleitunterlage zur amtlichen Formularbearbeitung einer Pfändungsmaßnahme. Es ersetzt keinen amtlichen Antrag oder Pfändungs- und Überweisungsbeschluss.\n\nMit freundlichen Grüßen\npayveo",
+  };
   for (const [key, name, type, subject, bodyTemplate] of templates) {
+    const professionalBody = professionalBodies[key] ?? bodyTemplate;
     await prisma.documentTemplate.upsert({
       where: { tenantId_key_version: { tenantId, key, version: 1 } },
-      update: { name, type, subject, bodyTemplate, status: "ACTIVE" },
-      create: { tenantId, key, name, type, version: 1, status: "ACTIVE", subject, bodyTemplate },
+      update: { name, type, subject, bodyTemplate: professionalBody, status: "ACTIVE" },
+      create: { tenantId, key, name, type, version: 1, status: "ACTIVE", subject, bodyTemplate: professionalBody },
     });
   }
+  await prisma.documentTemplate.updateMany({ where: { tenantId, key: "payment-request", status: "ACTIVE" }, data: { status: "ARCHIVED" } });
 }
 
 async function seedRvgReferenceData() {

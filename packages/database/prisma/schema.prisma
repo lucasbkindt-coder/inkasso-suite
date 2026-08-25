@@ -150,7 +150,49 @@ enum DocumentType {
   JUDICIAL_DUNNING_NOTICE
   ENFORCEMENT_NOTICE
   PAYMENT_PLAN
+  TITLE_NOTIFICATION
+  CASE_SETTLED
+  CLAIM_STATEMENT
+  ENFORCEMENT_ORDER
+  ENFORCEMENT_COVER_LETTER
+  GARNISHMENT_APPLICATION
+  PAYMENT_CONFIRMATION
   CUSTOM
+}
+
+enum EnforcementTitleType {
+  ENFORCEMENT_ORDER
+  JUDGMENT
+  COST_ASSESSMENT_ORDER
+  SETTLEMENT
+  NOTARIAL_DEED
+  OTHER
+}
+
+enum EnforcementTitleStatus {
+  DRAFT
+  ACTIVE
+  SATISFIED
+  VOIDED
+}
+
+enum EnforcementActionType {
+  BAILIFF_ORDER
+  ASSET_DISCLOSURE
+  GARNISHMENT
+  ACCOUNT_GARNISHMENT
+  WAGE_GARNISHMENT
+  OTHER
+}
+
+enum EnforcementActionStatus {
+  DRAFT
+  PREPARED
+  SUBMITTED
+  IN_PROGRESS
+  COMPLETED
+  FAILED
+  CANCELLED
 }
 
 enum DocumentStatus {
@@ -289,6 +331,12 @@ enum ActivityEventType {
   INSTALLMENT_PLAN_COMPLETED
   PORTAL_ACCOUNT_CREATED
   PORTAL_ACTIVATION_ISSUED
+  TITLE_CREATED
+  TITLE_ACTIVATED
+  TITLE_VOIDED
+  TITLE_SATISFIED
+  ENFORCEMENT_ACTION_CREATED
+  ENFORCEMENT_ACTION_STATUS_CHANGED
 }
 
 model User {
@@ -402,6 +450,8 @@ model Tenant {
   installmentPlanItems InstallmentPlanItem[]
   staffSessions       StaffSession[]
   activityEvents      ActivityEvent[]
+  enforcementTitles   EnforcementTitle[]
+  enforcementActions  EnforcementAction[]
 
   @@index([deletedAt])
 }
@@ -441,6 +491,8 @@ model Case {
   installmentRequests InstallmentRequest[]
   installmentPlans    InstallmentPlan[]
   activityEvents      ActivityEvent[]
+  enforcementTitles   EnforcementTitle[]
+  enforcementActions  EnforcementAction[]
 
   @@unique([tenantId, caseNumber])
   @@unique([tenantId, sequenceYear, sequenceNumber])
@@ -450,6 +502,63 @@ model Case {
   @@index([debtorPartyId])
   @@index([ownerMembershipId])
   @@index([tenantId, assignedMembershipId, deletedAt])
+}
+
+model EnforcementTitle {
+  id                    String                 @id @default(uuid()) @db.Uuid
+  tenantId              String                 @db.Uuid
+  caseId                String                 @db.Uuid
+  type                  EnforcementTitleType
+  status                EnforcementTitleStatus @default(DRAFT)
+  courtOrAuthority      String?
+  referenceNumber       String?
+  titleDate             DateTime
+  serviceDate           DateTime?
+  enforceableFrom       DateTime?
+  principalAmount       Decimal                @db.Decimal(15, 2)
+  costAmount            Decimal                @default(0) @db.Decimal(15, 2)
+  interestAmount        Decimal                @default(0) @db.Decimal(15, 2)
+  interestRule          Json?
+  titleTotal            Decimal                @db.Decimal(15, 2)
+  notes                 String?
+  createdByMembershipId String                 @db.Uuid
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @updatedAt
+
+  tenant              Tenant           @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  case                Case             @relation(fields: [caseId], references: [id], onDelete: Restrict)
+  createdByMembership TenantMembership @relation("EnforcementTitleCreatedBy", fields: [createdByMembershipId], references: [id], onDelete: Restrict)
+  actions             EnforcementAction[]
+
+  @@index([tenantId, caseId, status])
+  @@index([caseId, titleDate])
+  @@index([createdByMembershipId])
+}
+
+model EnforcementAction {
+  id                    String                  @id @default(uuid()) @db.Uuid
+  tenantId              String                  @db.Uuid
+  caseId                String                  @db.Uuid
+  titleId               String                  @db.Uuid
+  type                  EnforcementActionType
+  status                EnforcementActionStatus @default(DRAFT)
+  requestedAt           DateTime?
+  completedAt           DateTime?
+  referenceNumber       String?
+  amountAtRequest       Decimal                 @db.Decimal(15, 2)
+  notes                 String?
+  createdByMembershipId String                  @db.Uuid
+  createdAt             DateTime                @default(now())
+  updatedAt             DateTime                @updatedAt
+
+  tenant              Tenant           @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  case                Case             @relation(fields: [caseId], references: [id], onDelete: Restrict)
+  title               EnforcementTitle @relation(fields: [titleId], references: [id], onDelete: Restrict)
+  createdByMembership TenantMembership @relation("EnforcementActionCreatedBy", fields: [createdByMembershipId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId, caseId, status])
+  @@index([titleId, status])
+  @@index([createdByMembershipId])
 }
 
 model CaseCostCalculation {
@@ -1085,6 +1194,8 @@ model TenantMembership {
   createdInstallmentPlans InstallmentPlan[] @relation("CreatedInstallmentPlans")
   cancelledInstallmentPlans InstallmentPlan[] @relation("CancelledInstallmentPlans")
   activityEvents      ActivityEvent[]      @relation("ActivityActorMembership")
+  createdEnforcementTitles EnforcementTitle[] @relation("EnforcementTitleCreatedBy")
+  createdEnforcementActions EnforcementAction[] @relation("EnforcementActionCreatedBy")
 
   @@unique([tenantId, userId])
   @@index([userId, deletedAt])

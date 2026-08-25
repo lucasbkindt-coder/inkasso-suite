@@ -15,6 +15,7 @@ import { CaseTasks } from "./case-tasks";
 import { CaseInstallmentPlan } from "./case-installment-plan";
 import { CaseAssignee } from "./case-assignee";
 import { CaseTimeline } from "./case-timeline";
+import { CaseEnforcement } from "./case-enforcement";
 
 export function CaseDetail() {
   const params = useParams<{ id: string }>();
@@ -55,9 +56,10 @@ export function CaseDetail() {
           <CaseTabs />
           <CaseOverview caseRecord={caseRecord} />
           <CaseInstallmentPlan caseId={caseRecord.id} />
+          <CaseEnforcement caseId={caseRecord.id} />
           <CaseTasks caseId={caseRecord.id} />
           <CaseTimeline caseId={caseRecord.id} />
-          <CaseDocuments caseId={caseRecord.id} />
+          <CaseDocuments caseId={caseRecord.id} caseStatus={caseRecord.status} debtorType={caseRecord.debtorParty.type} />
           <CaseLedger caseId={caseRecord.id} />
         </div>
       </div>

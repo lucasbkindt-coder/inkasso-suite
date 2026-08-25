@@ -12,20 +12,36 @@ import { TemplateDto } from "./dto/template.dto";
 import { renderDin5008Document } from "./din5008-layout";
 import { MailService } from "./mail.service";
 
-const INITIAL_DEBTOR_PORTAL_TEMPLATE_KEYS = new Set(["payment-request"]);
+const INITIAL_DEBTOR_PORTAL_TEMPLATE_KEYS = new Set(["payment-request-consumer"]);
 type SystemTemplateRule = {
   filename: string;
   requiresOpenBalance: boolean;
   requiresPaymentDueDate: boolean;
-  requiresPreviousTemplate?: string;
+  requiresPreviousTemplate?: string | string[];
   requiresEnforceableTitle?: boolean;
+  requiresActiveInstallmentPlan?: boolean;
+  requiresDefaultedInstallmentPlan?: boolean;
+  debtorType?: "PERSON" | "COMPANY";
+  requiresSettledBalance?: boolean;
 };
+
+type InstallmentPlanWithItems = Prisma.InstallmentPlanGetPayload<{ include: { items: true } }>;
 
 const SYSTEM_TEMPLATE_RULES: Record<string, SystemTemplateRule> = {
   "payment-request": { filename: "zahlungsaufforderung", requiresOpenBalance: true, requiresPaymentDueDate: true },
-  "payment-reminder": { filename: "zweite-zahlungsaufforderung", requiresOpenBalance: true, requiresPaymentDueDate: true, requiresPreviousTemplate: "payment-request" },
+  "payment-request-consumer": { filename: "zahlungsaufforderung-privatperson", requiresOpenBalance: true, requiresPaymentDueDate: true, debtorType: "PERSON" },
+  "payment-request-business": { filename: "zahlungsaufforderung-unternehmen", requiresOpenBalance: true, requiresPaymentDueDate: true, debtorType: "COMPANY" },
+  "payment-reminder": { filename: "zweite-zahlungsaufforderung", requiresOpenBalance: true, requiresPaymentDueDate: true, requiresPreviousTemplate: ["payment-request-consumer", "payment-request-business", "payment-request"] },
   "court-dunning-notice": { filename: "ankuendigung-mahnverfahren", requiresOpenBalance: true, requiresPaymentDueDate: true },
   "enforcement-notice": { filename: "vollstreckungsankuendigung", requiresOpenBalance: true, requiresPaymentDueDate: true, requiresEnforceableTitle: true },
+  "title-notification": { filename: "mitteilung-titulierung", requiresOpenBalance: true, requiresPaymentDueDate: true, requiresEnforceableTitle: true },
+  "claim-statement": { filename: "forderungsaufstellung", requiresOpenBalance: false, requiresPaymentDueDate: false },
+  "case-settled": { filename: "erledigung", requiresOpenBalance: false, requiresPaymentDueDate: false, requiresSettledBalance: true },
+  "installment-agreement": { filename: "ratenplanbestaetigung", requiresOpenBalance: false, requiresPaymentDueDate: false, requiresActiveInstallmentPlan: true },
+  "installment-default-notice": { filename: "ratenplan-ausfall", requiresOpenBalance: true, requiresPaymentDueDate: true, requiresDefaultedInstallmentPlan: true },
+  "enforcement-order": { filename: "vollstreckungsauftrag", requiresOpenBalance: true, requiresPaymentDueDate: false, requiresEnforceableTitle: true },
+  "enforcement-cover-letter": { filename: "anschreiben-vollstreckung", requiresOpenBalance: true, requiresPaymentDueDate: false, requiresEnforceableTitle: true },
+  "garnishment-application": { filename: "pfaendungsunterlagen", requiresOpenBalance: true, requiresPaymentDueDate: false, requiresEnforceableTitle: true },
 } as const;
 
 type PortalRenderBlock =
@@ -245,7 +261,7 @@ export class DocumentsService {
         return document;
       });
       documentPersisted = true;
-      if (template.key === "payment-request") await this.deliverPaymentRequest(document.id, tenantId, caseData.debtorPartyId);
+      if (["payment-request-consumer", "payment-request-business"].includes(template.key)) await this.deliverPaymentRequest(document.id, tenantId, caseData.debtorPartyId);
       return document;
     } catch (error) {
       if (storageKey && !documentPersisted) await this.storage.remove(storageKey);
@@ -319,17 +335,34 @@ export class DocumentsService {
     const dueDate = (snapshot.document as Record<string, unknown>).paymentDueDate;
     if (rule.requiresPaymentDueDate && !dueDate) throw new BadRequestException("Für dieses Schreiben muss eine konkrete Zahlungsfrist angegeben werden.");
     if (dueDate && new Date(String(dueDate).split(".").reverse().join("-")).getTime() <= Date.now()) throw new BadRequestException("Die Zahlungsfrist muss in der Zukunft liegen.");
-    if (templateKey === "payment-request" && caseData.debtorParty.type === "PERSON") {
+    if (rule.debtorType && caseData.debtorParty.type !== rule.debtorType) throw new BadRequestException("Diese Dokumentvorlage ist für den Typ des Schuldners nicht zulässig.");
+    if (templateKey === "payment-request-consumer") {
       const required = ["name", "street", "postalCode", "city", "iban", "collectionRegistrationAuthority", "collectionRegistrationAddress", "collectionRegistrationContact"] as const;
       const missing = required.find((key) => !company[key]);
       if (missing) throw new BadRequestException(this.missingPaymentRequestSettingMessage(missing));
     }
     if (rule.requiresPreviousTemplate) {
-      const previous = await this.prisma.caseDocument.findFirst({ where: { caseId: caseData.id, tenantId: caseData.tenantId, status: { not: DocumentStatus.VOIDED }, template: { key: rule.requiresPreviousTemplate } }, select: { id: true } });
+      const previous = await this.prisma.caseDocument.findFirst({ where: { caseId: caseData.id, tenantId: caseData.tenantId, status: { not: DocumentStatus.VOIDED }, template: { key: { in: Array.isArray(rule.requiresPreviousTemplate) ? rule.requiresPreviousTemplate : [rule.requiresPreviousTemplate] } } }, select: { id: true } });
       if (!previous) throw new BadRequestException("Eine zweite Zahlungsaufforderung setzt eine vorherige Zahlungsaufforderung voraus.");
     }
     if (templateKey === "court-dunning-notice" && (caseData.status !== "OPEN" || !["OUT_OF_COURT", "JUDICIAL_DUNNING"].includes(caseData.phase) || caseData.claim?.status === "DISPUTED")) throw new BadRequestException("Die Ankündigung eines gerichtlichen Mahnverfahrens ist für den aktuellen Aktenstatus nicht zulässig.");
-    if (rule.requiresEnforceableTitle) throw new BadRequestException("Eine Vollstreckungsankündigung ist ohne dokumentierte Vollstreckungsgrundlage nicht generierbar.");
+    if (rule.requiresEnforceableTitle) {
+      const title = await this.prisma.enforcementTitle.findFirst({ where: { tenantId: caseData.tenantId, caseId: caseData.id, status: "ACTIVE" }, select: { id: true } });
+      if (!title) throw new BadRequestException("Für dieses Schreiben ist ein aktiver Vollstreckungstitel erforderlich.");
+      if (["enforcement-cover-letter", "garnishment-application"].includes(templateKey)) {
+        const action = await this.prisma.enforcementAction.findFirst({ where: { tenantId: caseData.tenantId, caseId: caseData.id, titleId: title.id }, select: { id: true } });
+        if (!action) throw new BadRequestException("Für dieses Schreiben ist eine Vollstreckungsmaßnahme erforderlich.");
+      }
+    }
+    if (rule.requiresActiveInstallmentPlan) {
+      const plan = await this.prisma.installmentPlan.findFirst({ where: { tenantId: caseData.tenantId, caseId: caseData.id, status: "ACTIVE" }, select: { id: true } });
+      if (!plan) throw new BadRequestException("Für dieses Schreiben ist ein aktiver Ratenplan erforderlich.");
+    }
+    if (rule.requiresDefaultedInstallmentPlan) {
+      const plan = await this.prisma.installmentPlan.findFirst({ where: { tenantId: caseData.tenantId, caseId: caseData.id, status: "DEFAULTED" }, select: { id: true } });
+      if (!plan) throw new BadRequestException("Für dieses Schreiben ist ein ausgefallener Ratenplan erforderlich.");
+    }
+    if (rule.requiresSettledBalance && new Prisma.Decimal(statement.grandTotal).gt(0)) throw new BadRequestException("Eine Erledigterklärung ist nur bei ausgeglichener Forderung zulässig.");
   }
 
   private missingPaymentRequestSettingMessage(field: string) {
@@ -338,10 +371,18 @@ export class DocumentsService {
   }
 
   private previewWarnings(templateKey: string, snapshot: Record<string, unknown>) {
-    if (templateKey !== "payment-request" || (snapshot.debtor as Record<string, unknown>).type !== "PERSON") return [];
-    const company = snapshot.company as Record<string, unknown>;
-    const required = ["name", "street", "postalCode", "city", "iban", "collectionRegistrationAuthority", "collectionRegistrationAddress", "collectionRegistrationContact"];
-    return required.filter((field) => !company[field]).map((field) => this.missingPaymentRequestSettingMessage(field));
+    const warnings: string[] = [];
+    if (templateKey === "payment-request-consumer" && (snapshot.debtor as Record<string, unknown>).type === "PERSON") {
+      const company = snapshot.company as Record<string, unknown>;
+      const required = ["name", "street", "postalCode", "city", "iban", "collectionRegistrationAuthority", "collectionRegistrationAddress", "collectionRegistrationContact"];
+      warnings.push(...required.filter((field) => !company[field]).map((field) => this.missingPaymentRequestSettingMessage(field)));
+    }
+    const requiresTitle = ["title-notification", "enforcement-notice", "enforcement-order", "enforcement-cover-letter", "garnishment-application"].includes(templateKey);
+    if (requiresTitle && !snapshot.title) warnings.push("Für dieses Schreiben ist ein aktiver Vollstreckungstitel erforderlich.");
+    if (["enforcement-cover-letter", "garnishment-application"].includes(templateKey) && !snapshot.enforcementAction) warnings.push("Für dieses Schreiben ist zusätzlich eine Vollstreckungsmaßnahme erforderlich.");
+    if (templateKey === "installment-agreement" && !snapshot.installmentPlan) warnings.push("Für dieses Schreiben ist ein aktiver Ratenplan erforderlich.");
+    if (templateKey === "installment-default-notice" && (!snapshot.installmentPlan || this.record(snapshot.installmentPlan).status !== "DEFAULTED")) warnings.push("Für dieses Schreiben ist ein ausgefallener Ratenplan erforderlich.");
+    return warnings;
   }
 
   private portalActivationBaseUrl() {
@@ -421,9 +462,14 @@ export class DocumentsService {
     return value;
   }
   private async snapshot(caseId: string, tenantId: string, paymentDueDate?: string) {
-    const [data, settings] = await Promise.all([
+    const [data, settings, activeTitle, enforcementAction, activeInstallmentPlan, defaultedInstallmentPlan, firstPaymentRequest] = await Promise.all([
       this.caseData(caseId, tenantId),
       this.prisma.tenantDocumentSettings.findUnique({ where: { tenantId } }),
+      this.prisma.enforcementTitle.findFirst({ where: { tenantId, caseId, status: "ACTIVE" }, orderBy: { titleDate: "desc" } }),
+      this.prisma.enforcementAction.findFirst({ where: { tenantId, caseId, title: { status: "ACTIVE" } }, orderBy: { createdAt: "desc" } }),
+      this.prisma.installmentPlan.findFirst({ where: { tenantId, caseId, status: "ACTIVE" }, include: { items: { orderBy: { sequenceNumber: "asc" } } } }),
+      this.prisma.installmentPlan.findFirst({ where: { tenantId, caseId, status: "DEFAULTED" }, include: { items: { orderBy: { sequenceNumber: "asc" } } } }),
+      this.prisma.caseDocument.findFirst({ where: { tenantId, caseId, status: { not: DocumentStatus.VOIDED }, template: { key: { in: ["payment-request-consumer", "payment-request-business", "payment-request"] } } }, orderBy: { generatedAt: "asc" }, select: { generatedAt: true } }),
     ]);
     if (!settings)
       throw new BadRequestException("Unternehmensdaten für Schreiben sind nicht konfiguriert.");
@@ -470,7 +516,7 @@ export class DocumentsService {
     const interestPeriods = this.array(interestPreview.periods).map((period) => this.record(period));
     const firstInterestPeriod = interestPeriods[0];
     const interestNarrative = interestCalculation?.calculatedAmount.gt(0) && firstInterestPeriod.from && firstInterestPeriod.to && firstInterestPeriod.principalAmount && firstInterestPeriod.effectiveAnnualRate
-      ? `Auf die verzinsliche Forderung von ${this.money(firstInterestPeriod.principalAmount)} werden für den Zeitraum vom ${this.displayDate(firstInterestPeriod.from)} bis ${this.displayDate(firstInterestPeriod.to)} Verzugszinsen in Höhe von ${firstInterestPeriod.effectiveAnnualRate} % p.a. berechnet. Bis zum Berechnungsstichtag belaufen sich diese auf ${this.money(interestCalculation?.calculatedAmount)}.`
+      ? `Auf die verzinsliche Forderung von ${this.money(firstInterestPeriod.principalAmount)} werden für den Zeitraum vom ${this.displayDate(firstInterestPeriod.from)} bis ${this.displayDate(firstInterestPeriod.to)} Verzugszinsen in Höhe von ${this.rate(firstInterestPeriod.effectiveAnnualRate)} % p.a. berechnet. Bis zum Berechnungsstichtag belaufen sich diese auf ${this.money(interestCalculation?.calculatedAmount)}.`
       : "";
     const rvgCosts = data.costCalculations.filter((calculation) => calculation.type === "RVG");
     const rvgCostAmount = rvgCosts.reduce((sum, calculation) => sum.plus(calculation.calculatedAmount), new Prisma.Decimal(0));
@@ -507,6 +553,29 @@ export class DocumentsService {
           .reduce((sum, entry) => sum.plus(entry.amount), new Prisma.Decimal(0))
           .toFixed(2),
       },
+      correspondence: { firstPaymentRequestDate: firstPaymentRequest ? this.date(firstPaymentRequest.generatedAt) : "" },
+      title: activeTitle ? {
+        type: activeTitle.type,
+        status: activeTitle.status,
+        courtOrAuthority: activeTitle.courtOrAuthority ?? "",
+        referenceNumber: activeTitle.referenceNumber ?? "",
+        titleDate: this.date(activeTitle.titleDate),
+        serviceDate: activeTitle.serviceDate ? this.date(activeTitle.serviceDate) : "",
+        enforceableFrom: activeTitle.enforceableFrom ? this.date(activeTitle.enforceableFrom) : "",
+        principalAmount: activeTitle.principalAmount.toFixed(2),
+        costAmount: activeTitle.costAmount.toFixed(2),
+        interestAmount: activeTitle.interestAmount.toFixed(2),
+        titleTotal: activeTitle.titleTotal.toFixed(2),
+      } : null,
+      enforcementAction: enforcementAction ? {
+        type: enforcementAction.type,
+        status: enforcementAction.status,
+        referenceNumber: enforcementAction.referenceNumber ?? "",
+        requestedAt: enforcementAction.requestedAt ? this.date(enforcementAction.requestedAt) : "",
+        amountAtRequest: enforcementAction.amountAtRequest.toFixed(2),
+        notes: enforcementAction.notes ?? "",
+      } : null,
+      installmentPlan: this.installmentPlanSnapshot(activeInstallmentPlan ?? defaultedInstallmentPlan),
       company: {
         name: settings.companyName,
         legalName: settings.legalName ?? "",
@@ -569,48 +638,113 @@ export class DocumentsService {
     });
   }
   private composeSystemBody(templateKey: string, templateBody: string, snapshot: Record<string, unknown>) {
-    if (!["payment-request", "payment-reminder", "court-dunning-notice"].includes(templateKey)) return templateBody;
-    const greeting = templateBody.split(/\n\s*\n/).map((paragraph) => paragraph.trim()).find(Boolean);
-    if (!greeting) return templateBody;
+    if (!SYSTEM_TEMPLATE_RULES[templateKey]) return templateBody;
+    const greeting = "Sehr geehrte Damen und Herren,";
     const legal = this.record(snapshot.legalDetails);
     const claim = this.record(snapshot.claim);
     const ledger = this.record(snapshot.ledger);
     const document = this.record(snapshot.document);
+    const title = this.record(snapshot.title);
+    const action = this.record(snapshot.enforcementAction);
+    const plan = this.record(snapshot.installmentPlan);
+    const correspondence = this.record(snapshot.correspondence);
     const dueDate = String(document.paymentDueDate ?? "").trim();
     const total = String(ledger.openTotal ?? "").trim();
     const amount = total ? this.money(total) : "";
     const invoiceReference = String(claim.invoiceNumber ?? "").trim();
-    const claimReference = invoiceReference ? ` zur Forderungsangelegenheit ${invoiceReference}` : "";
+    const claimReference = invoiceReference ? ` aus der Rechnung ${invoiceReference}` : "";
     const request = (prefix: string) => {
-      const amountText = amount ? ` von ${amount}` : "";
-      const dueText = dueDate ? ` bis spätestens zum ${dueDate}` : "";
-      return `${prefix}, den nachstehend ausgewiesenen Gesamtbetrag${amountText}${dueText} auszugleichen.`;
+      return `${prefix}, den nachstehend ausgewiesenen Gesamtbetrag von ${amount} bis spätestens zum ${dueDate} auszugleichen.`;
     };
-    if (templateKey === "payment-request") {
+    const closing = "Für Rückfragen oder falls Sie Einwendungen gegen die Forderung haben, stehen wir Ihnen gerne zur Verfügung.";
+    const interestAndCosts = [legal.interest, legal.costs]
+      .map((value) => String(value ?? "").trim())
+      .filter(Boolean)
+      .join(" ");
+    const titleName = this.titleName(String(title.type ?? ""));
+    const actionName = this.actionName(String(action.type ?? ""));
+    const titleDate = String(title.titleDate ?? "").trim();
+    const titleReference = String(title.referenceNumber ?? "").trim();
+    const titleAuthority = String(title.courtOrAuthority ?? "").trim();
+    const planItems = this.array(plan.items).map((item) => this.record(item));
+    const firstInstallment = planItems[0];
+    const paidInstallments = planItems.filter((item) => item.status === "PAID").length;
+
+    if (templateKey === "payment-request-consumer" || templateKey === "payment-request-business") {
       const firstParagraph = [legal.commission, legal.clientAddress, legal.claim]
         .map((value) => String(value ?? "").trim())
         .filter(Boolean)
         .join(" ");
-      const secondParagraph = [legal.interest, legal.costs]
-        .map((value) => String(value ?? "").trim())
-        .filter(Boolean)
-        .join(" ");
-      return [greeting, firstParagraph, secondParagraph, request("Wir fordern Sie daher auf")]
+      const contextParagraph = templateKey === "payment-request-business"
+        ? "Da die Forderung gegenüber einem Unternehmen besteht, richten sich Verzugszinsen und die Erstattungsfähigkeit der Kosten nach den für den unternehmerischen Geschäftsverkehr geltenden gesetzlichen Vorschriften."
+        : "Die ausgewiesenen Verzugszinsen und Inkassokosten wurden auf Grundlage der für Verbraucherforderungen maßgeblichen gesetzlichen Vorschriften ermittelt.";
+      const portal = templateKey === "payment-request-consumer"
+        ? "Wenn Sie den Betrag nicht auf einmal ausgleichen können, können Sie über das Schuldnerportal eine Ratenzahlung anfragen."
+        : "Bitte veranlassen Sie die Zahlung unter Angabe des Aktenzeichens als Verwendungszweck.";
+      return [greeting, firstParagraph, interestAndCosts, contextParagraph, request("Wir bitten Sie daher"), closing, portal, "Mit freundlichen Grüßen\npayveo"]
         .filter(Boolean)
         .join("\n\n");
     }
     if (templateKey === "payment-reminder") {
       return [
         greeting,
-        `Mit unserem vorherigen Schreiben haben wir Sie bereits aufgefordert, die offene Forderung${claimReference} auszugleichen. Bis heute konnten wir keinen vollständigen Zahlungseingang feststellen.${amount ? ` Der derzeit offene Gesamtbetrag beläuft sich auf ${amount}.` : ""}`,
+        `Mit unserem Schreiben vom ${String(correspondence.firstPaymentRequestDate ?? "dem vorherigen Datum")} haben wir Sie bereits gebeten, die Forderung${claimReference} auszugleichen. Bis heute konnten wir keinen vollständigen Zahlungseingang feststellen. Der aktuelle Forderungsstand beträgt ${amount}.`,
+        interestAndCosts,
         request("Wir fordern Sie erneut auf"),
+        "Sollte die Frist ohne vollständigen Ausgleich verstreichen, behalten wir uns vor, weitere Schritte der Rechtsverfolgung zu prüfen.",
+        closing,
+        "Mit freundlichen Grüßen\npayveo",
       ].join("\n\n");
     }
-    return [
-      greeting,
-      `Trotz unserer bisherigen Zahlungsaufforderungen ist die offene Forderung${claimReference} weiterhin nicht vollständig ausgeglichen.${amount ? ` Der derzeit offene Gesamtbetrag beläuft sich auf ${amount}.` : ""}`,
-      `${request("Wir fordern Sie daher letztmalig auf")} Andernfalls kann die Einleitung eines gerichtlichen Mahnverfahrens geprüft werden.`,
-    ].join("\n\n");
+    if (templateKey === "court-dunning-notice") return [greeting, `Trotz der bisherigen Korrespondenz ist die Forderung${claimReference} weiterhin offen. Der aktuelle Gesamtbetrag beträgt ${amount}.`, request("Wir fordern Sie letztmalig auf"), "Nach fruchtlosem Ablauf dieser Frist kann die gerichtliche Rechtsverfolgung, insbesondere ein Mahnverfahren, veranlasst oder geprüft werden. Dadurch können weitere gesetzlich erstattungsfähige Kosten entstehen.", closing, "Mit freundlichen Grüßen\npayveo"].join("\n\n");
+    if (templateKey === "title-notification") return [greeting, `In der oben bezeichneten Angelegenheit liegt nun ein ${titleName} vor${titleAuthority ? `, erlassen durch ${titleAuthority}` : ""}${titleReference ? ` unter dem Aktenzeichen ${titleReference}` : ""}${titleDate ? `. Das Titeldatum ist der ${titleDate}` : ""}.`, title.serviceDate ? `Die Zustellung erfolgte am ${title.serviceDate}.` : "", title.enforceableFrom ? `Der Titel ist seit dem ${title.enforceableFrom} vollstreckbar.` : "", `Die titulierte Forderung beträgt insgesamt ${this.money(title.titleTotal)}. Davon entfallen ${this.money(title.principalAmount)} auf die Hauptforderung, ${this.money(title.costAmount)} auf Kosten und ${this.money(title.interestAmount)} auf Zinsen. Nach dem aktuellen Buchungsstand beträgt der offene Betrag ${amount}.`, request("Wir bitten Sie"), "Ein vollstreckbarer Titel ermöglicht grundsätzlich die Einleitung von Zwangsvollstreckungsmaßnahmen. Über konkrete Maßnahmen entscheiden wir erst unter Berücksichtigung des weiteren Zahlungsverlaufs.", closing, "Mit freundlichen Grüßen\npayveo"].filter(Boolean).join("\n\n");
+    if (templateKey === "enforcement-notice") return [greeting, `Unter Bezugnahme auf den ${titleName}${titleReference ? ` zum Aktenzeichen ${titleReference}` : ""} stellen wir fest, dass die Forderung weiterhin nicht vollständig ausgeglichen ist. Der aktuelle offene Betrag beträgt ${amount}.`, request("Wir fordern Sie daher letztmalig auf"), action.type ? `Nach ergebnislosem Fristablauf kann die vorbereitete Maßnahme „${actionName}“ im Rahmen der gesetzlichen Voraussetzungen weiterverfolgt werden.` : "Nach ergebnislosem Fristablauf können geeignete Zwangsvollstreckungsmaßnahmen im Rahmen der gesetzlichen Voraussetzungen veranlasst werden.", closing, "Mit freundlichen Grüßen\npayveo"].join("\n\n");
+    if (templateKey === "case-settled") return [greeting, `wir bestätigen, dass die Forderungsangelegenheit zum Aktenzeichen ${this.record(snapshot.case).caseNumber} nach dem aktuellen Buchungsstand vollständig ausgeglichen ist.`, "Die Angelegenheit wird bei payveo als erledigt geführt. Diese Bestätigung betrifft ausschließlich den hier dokumentierten Forderungsstand.", "Wir danken Ihnen für die Erledigung.", "Mit freundlichen Grüßen\npayveo"].join("\n\n");
+    if (templateKey === "installment-agreement") return [greeting, `wir bestätigen die für die Forderungsangelegenheit zum Aktenzeichen ${this.record(snapshot.case).caseNumber} getroffene Ratenvereinbarung. Der Gesamtplanbetrag beträgt ${this.money(plan.initialOpenAmount)}; die vereinbarte Rate beträgt ${this.money(plan.plannedInstallmentAmount)}.`, firstInstallment?.dueDate || plan.startDate ? `Die erste Rate ist am ${firstInstallment?.dueDate ?? this.displayDate(plan.startDate)} fällig. Die weiteren Raten richten sich nach der nachfolgenden tabellarischen Ratenübersicht und sind jeweils fristgerecht zu zahlen.` : "Die weiteren Raten richten sich nach der nachfolgenden tabellarischen Ratenübersicht und sind jeweils fristgerecht zu zahlen.", "Bitte verwenden Sie bei jeder Zahlung das Aktenzeichen als Verwendungszweck. Zahlungsdaten und den aktuellen Planstand finden Sie auch im Schuldnerportal.", "Bitte halten Sie die vereinbarten Fälligkeiten ein; bei Fragen zu einzelnen Raten kontaktieren Sie uns rechtzeitig.", "Mit freundlichen Grüßen\npayveo"].join("\n\n");
+    if (templateKey === "installment-default-notice") return [greeting, `die Ratenvereinbarung zum Aktenzeichen ${this.record(snapshot.case).caseNumber} wird aktuell als ausgefallen geführt. Von ${planItems.length} vereinbarten Raten wurden bislang ${paidInstallments} vollständig erfüllt.`, `Der derzeit offene Betrag beträgt ${amount}.`, request("Wir bitten Sie"), "Nach fruchtlosem Ablauf der Frist kann die weitere Rechtsverfolgung geprüft werden.", closing, "Mit freundlichen Grüßen\npayveo"].join("\n\n");
+    if (templateKey === "claim-statement") return [greeting, `nachfolgend erhalten Sie zum Stichtag ${this.record(snapshot.claimStatement).asOf ? this.displayDate(this.record(snapshot.claimStatement).asOf) : this.record(snapshot.today)} die aktuelle Forderungsaufstellung zur Forderungsangelegenheit des Auftraggebers ${this.record(snapshot.client).displayName} gegen ${this.record(snapshot.debtor).displayName} unter dem Aktenzeichen ${this.record(snapshot.case).caseNumber}.`, "Die nachstehende Übersicht bildet den aktuellen Buchungs- und Forderungsstand ab.", "Mit freundlichen Grüßen\npayveo"].join("\n\n");
+    if (templateKey === "enforcement-cover-letter") return [greeting, `in vorbezeichneter Angelegenheit ersuchen wir um Bearbeitung der angelegten Maßnahme „${actionName}“. Gläubiger ist ${this.record(snapshot.client).displayName}; Schuldner ist ${this.record(snapshot.debtor).displayName}.`, `Grundlage ist der ${titleName}${titleReference ? ` zum Aktenzeichen ${titleReference}` : ""}${titleAuthority ? ` der Stelle ${titleAuthority}` : ""}${titleDate ? ` vom ${titleDate}` : ""}. Der aktuelle Forderungsstand beträgt ${amount}.`, "Die für die Bearbeitung erforderlichen Unterlagen zum Titel und zur Forderung sind beigefügt. Für Rückfragen stehen wir unter Angabe des payveo-Aktenzeichens gerne zur Verfügung.", "Mit freundlichen Grüßen\npayveo"].join("\n\n");
+    if (templateKey === "enforcement-order") return [greeting, `für die Forderungsangelegenheit des Gläubigers ${this.record(snapshot.client).displayName} gegen ${this.record(snapshot.debtor).displayName} liegt ein ${titleName}${title.referenceNumber ? ` zum Aktenzeichen ${title.referenceNumber}` : ""} vor. Der aktuelle Forderungsstand beträgt ${amount}.`, "Dieses Schreiben dient als strukturierte Unterlage zur Vorbereitung der Vollstreckung. Maßgebliche amtliche Formulare und deren gesetzliche Anforderungen bleiben unberührt.", "Mit freundlichen Grüßen\npayveo"].join("\n\n");
+    if (templateKey === "garnishment-application") return [greeting, `für die Forderungsangelegenheit des Gläubigers ${this.record(snapshot.client).displayName} gegen ${this.record(snapshot.debtor).displayName} wird die Maßnahme „${actionName}“ vorbereitet. Grundlage ist der ${titleName}${title.referenceNumber ? ` zum Aktenzeichen ${title.referenceNumber}` : ""}; der aktuelle Forderungsstand beträgt ${amount}.`, "Dieses Schreiben ist eine strukturierte Begleitunterlage zur amtlichen Formularbearbeitung und kein amtlicher Pfändungs- und Überweisungsbeschluss oder Antrag. Die erforderlichen amtlichen Formulare sind gesondert und vollständig zu verwenden.", "Für Rückfragen stehen wir unter Angabe des payveo-Aktenzeichens zur Verfügung.", "Mit freundlichen Grüßen\npayveo"].join("\n\n");
+    return templateBody;
+  }
+  private installmentPlanSnapshot(plan: InstallmentPlanWithItems | null) {
+    if (!plan) return null;
+    return {
+      status: plan.status,
+      initialOpenAmount: plan.initialOpenAmount.toFixed(2),
+      plannedInstallmentAmount: plan.plannedInstallmentAmount.toFixed(2),
+      startDate: this.date(plan.startDate),
+      numberOfInstallments: plan.numberOfInstallments,
+      items: plan.items.map((item) => ({
+        sequenceNumber: item.sequenceNumber,
+        dueDate: this.date(item.dueDate),
+        plannedAmount: item.plannedAmount.toFixed(2),
+        status: item.status,
+      })),
+    };
+  }
+  private titleName(type: string) {
+    const names: Record<string, string> = {
+      ENFORCEMENT_ORDER: "Vollstreckungsbescheid",
+      JUDGMENT: "Urteil",
+      COST_ASSESSMENT_ORDER: "Kostenfestsetzungsbeschluss",
+      SETTLEMENT: "Vergleich",
+      NOTARIAL_DEED: "notarielles Schuldanerkenntnis",
+      OTHER: "Vollstreckungstitel",
+    };
+    return names[type] ?? "Vollstreckungstitel";
+  }
+  private actionName(type: string) {
+    const names: Record<string, string> = {
+      BAILIFF_ORDER: "Vollstreckungsauftrag an den Gerichtsvollzieher",
+      ASSET_DISCLOSURE: "Antrag auf Vermögensauskunft",
+      GARNISHMENT: "Pfändungsmaßnahme",
+      ACCOUNT_GARNISHMENT: "Kontopfändung",
+      WAGE_GARNISHMENT: "Lohnpfändung",
+      OTHER: "Vollstreckungsmaßnahme",
+    };
+    return names[type] ?? "Vollstreckungsmaßnahme";
   }
   private validateTemplate(dto: Pick<TemplateDto, "subject" | "bodyTemplate">) {
     const allowed = new Set([
@@ -673,6 +807,9 @@ export class DocumentsService {
   }
   private money(value: unknown) {
     return new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR" }).format(Number(new Prisma.Decimal(String(value ?? "0")).toFixed(2)));
+  }
+  private rate(value: unknown) {
+    return new Prisma.Decimal(String(value ?? "0")).toDecimalPlaces(2).toFixed(2).replace(".", ",");
   }
   private displayDate(value: unknown) {
     const date = new Date(String(value));

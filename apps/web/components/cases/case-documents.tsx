@@ -22,7 +22,12 @@ const documentStatusLabels: Record<CaseDocument["status"], string> = {
   VOIDED: "Ungültig",
 };
 
-export function CaseDocuments({ caseId }: { caseId: string }) {
+function isPositiveDecimal(value: string) {
+  const [whole = "", fraction = ""] = value.split(".");
+  return /[1-9]/.test(whole.replace(/^0+/, "")) || /[1-9]/.test(fraction);
+}
+
+export function CaseDocuments({ caseId, debtorType, caseStatus }: { caseId: string; debtorType: "PERSON" | "COMPANY"; caseStatus: "OPEN" | "CLOSED" | "CANCELLED" }) {
   const [documents, setDocuments] = React.useState<CaseDocument[]>([]);
   const [templates, setTemplates] = React.useState<DocumentTemplate[]>([]);
   const [open, setOpen] = React.useState(false);
@@ -32,12 +37,36 @@ export function CaseDocuments({ caseId }: { caseId: string }) {
   const load = React.useCallback(async () => {
     setLoading(true);
     try {
-      const [docs, templateValues] = await Promise.all([
+      const [docs, templateValues, ledger, titles, actions, plans] = await Promise.all([
         caseApi.getDocuments(caseId),
         caseApi.getDocumentTemplates(),
+        caseApi.getLedger(caseId),
+        caseApi.getEnforcementTitles(caseId),
+        caseApi.getEnforcementActions(caseId),
+        caseApi.getInstallmentPlans(),
       ]);
       setDocuments(docs);
-      setTemplates(templateValues.filter((template) => template.status === "ACTIVE"));
+      const open = isPositiveDecimal(ledger.totals.totalOpen);
+      const activeTitle = titles.some((title) => title.status === "ACTIVE");
+      const activePlan = plans.some((plan) => plan.case?.id === caseId && plan.status === "ACTIVE");
+      const defaultedPlan = plans.some((plan) => plan.case?.id === caseId && plan.status === "DEFAULTED");
+      const firstRequest = docs.some((document) => ["payment-request-consumer", "payment-request-business", "payment-request"].includes(document.template?.key ?? "") && document.status !== "VOIDED");
+      const actionExists = actions.length > 0;
+      const garnishmentActionExists = actions.some((action) => ["GARNISHMENT", "ACCOUNT_GARNISHMENT", "WAGE_GARNISHMENT"].includes(action.type));
+      const keys = new Set<string>(["claim-statement"]);
+      if (open && debtorType === "PERSON") keys.add("payment-request-consumer");
+      if (open && debtorType === "COMPANY") keys.add("payment-request-business");
+      if (open && firstRequest) keys.add("payment-reminder");
+      if (open && caseStatus === "OPEN" && !activeTitle) keys.add("court-dunning-notice");
+      if (activeTitle) keys.add("title-notification");
+      if (activeTitle && open) keys.add("enforcement-notice");
+      if (activeTitle && actionExists) keys.add("enforcement-cover-letter");
+      if (activeTitle) keys.add("enforcement-order");
+      if (activeTitle && garnishmentActionExists) keys.add("garnishment-application");
+      if (activePlan) keys.add("installment-agreement");
+      if (defaultedPlan) keys.add("installment-default-notice");
+      if (!open) keys.add("case-settled");
+      setTemplates(templateValues.filter((template) => template.status === "ACTIVE" && keys.has(template.key)));
       setError("");
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Dokumente konnten nicht geladen werden.");
@@ -256,7 +285,7 @@ function DocumentGenerateDialog({
                   ))}
                 </select>
               </label>
-              {selected?.key === "payment-request" || selected?.key === "payment-reminder" || selected?.key === "court-dunning-notice" || selected?.key === "enforcement-notice" ? (
+              {["payment-request-consumer", "payment-request-business", "payment-reminder", "court-dunning-notice", "enforcement-notice", "title-notification", "installment-default-notice"].includes(selected?.key ?? "") ? (
                 <label className="mt-4 grid gap-1 text-sm font-medium">
                   Zahlungsfrist
                   <input

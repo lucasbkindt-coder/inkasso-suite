@@ -18,11 +18,13 @@ import { InstallmentRequestsModule } from "./installment-requests/installment-re
 import { InstallmentPlansModule } from "./installment-plans/installment-plans.module";
 import { StaffAuthModule } from "./staff-auth/staff-auth.module";
 import { ActivityModule } from "./activity/activity.module";
+import { EnforcementModule } from "./enforcement/enforcement.module";
 
 @Module({
   imports: [
     CoreModule,
     ActivityModule,
+    EnforcementModule,
     StaffAuthModule,
     DebtorsModule,
     PartiesModule,

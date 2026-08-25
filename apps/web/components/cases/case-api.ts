@@ -29,6 +29,7 @@ import type {
 } from "@/types/client-submission";
 import type { InstallmentRequest, InstallmentRequestStatus } from "@/types/installment-request";
 import type { InstallmentPlan } from "@/types/installment-plan";
+import type { EnforcementAction, EnforcementActionStatus, EnforcementActionType, EnforcementTitle, EnforcementTitleStatus, EnforcementTitleType } from "@/types/enforcement";
 import type { ActivityItem } from "@/components/activity/activity-list";
 
 const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "/api";
@@ -135,6 +136,12 @@ function queryString(query: Record<string, string | number | boolean | undefined
 }
 
 export const caseApi = {
+  getEnforcementTitles: (caseId: string) => request<EnforcementTitle[]>(`/cases/${caseId}/enforcement/titles`),
+  createEnforcementTitle: (caseId: string, payload: { type: EnforcementTitleType; courtOrAuthority?: string; referenceNumber?: string; titleDate: string; serviceDate?: string; enforceableFrom?: string; principalAmount: string; costAmount?: string; interestAmount?: string; notes?: string }) => request<EnforcementTitle>(`/cases/${caseId}/enforcement/titles`, { method: "POST", body: JSON.stringify(payload) }),
+  updateEnforcementTitleStatus: (caseId: string, titleId: string, status: EnforcementTitleStatus) => request<EnforcementTitle>(`/cases/${caseId}/enforcement/titles/${titleId}/status`, { method: "PATCH", body: JSON.stringify({ status }) }),
+  getEnforcementActions: (caseId: string) => request<EnforcementAction[]>(`/cases/${caseId}/enforcement/actions`),
+  createEnforcementAction: (caseId: string, payload: { titleId: string; type: EnforcementActionType; amountAtRequest: string; referenceNumber?: string; notes?: string }) => request<EnforcementAction>(`/cases/${caseId}/enforcement/actions`, { method: "POST", body: JSON.stringify(payload) }),
+  updateEnforcementActionStatus: (caseId: string, actionId: string, status: EnforcementActionStatus) => request<EnforcementAction>(`/cases/${caseId}/enforcement/actions/${actionId}/status`, { method: "PATCH", body: JSON.stringify({ status }) }),
   getInstallmentRequests: () => request<InstallmentRequest[]>("/installment-requests"),
   getInstallmentRequest: (id: string) => request<InstallmentRequest>(`/installment-requests/${id}`),
   reviewInstallmentRequest: (id: string) => request<InstallmentRequest>(`/installment-requests/${id}/review`, { method: "POST" }),

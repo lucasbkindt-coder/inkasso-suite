@@ -52,6 +52,12 @@ const TITLES: Record<ActivityEventType, string> = {
   INSTALLMENT_PLAN_COMPLETED: "Ratenplan abgeschlossen",
   PORTAL_ACCOUNT_CREATED: "Portalzugang angelegt",
   PORTAL_ACTIVATION_ISSUED: "Portalaktivierung ausgestellt",
+  TITLE_CREATED: "Titel erfasst",
+  TITLE_ACTIVATED: "Titel aktiviert",
+  TITLE_VOIDED: "Titel annulliert",
+  TITLE_SATISFIED: "Titel als erfüllt markiert",
+  ENFORCEMENT_ACTION_CREATED: "Vollstreckungsmaßnahme angelegt",
+  ENFORCEMENT_ACTION_STATUS_CHANGED: "Status der Vollstreckungsmaßnahme geändert",
 };
 
 @Injectable()

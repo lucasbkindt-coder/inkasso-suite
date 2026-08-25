@@ -76,6 +76,7 @@ export async function renderDin5008Document(subject: string, body: string, snaps
   const caseData = get(snapshot, "case");
   const portalAccess = get(snapshot, "portalAccess");
   const document = get(snapshot, "document");
+  const installmentPlan = get(snapshot, "installmentPlan");
   const dueDate = text(get(document, "paymentDueDate"));
 
   if (!get(address, "street") || !get(address, "postalCode") || !get(address, "city")) {
@@ -187,6 +188,35 @@ export async function renderDin5008Document(subject: string, body: string, snaps
   };
 
   for (const paragraph of body.split(/\n\s*\n/).map((value) => value.trim()).filter(Boolean)) drawParagraph(paragraph);
+
+  if (text(get(document, "templateKey")) === "installment-agreement" && installmentPlan) {
+    const items = Array.isArray(get(installmentPlan, "items")) ? get(installmentPlan, "items") as RecordValue[] : [];
+    if (items.length) {
+      drawSectionTitle("Ratenübersicht");
+      const header = () => {
+        ensure(mm(9));
+        pdf.fillColor(DIN5008_DESIGN.colors.muted).fontSize(DIN5008_DESIGN.fontSize.meta)
+          .text("Rate", LAYOUT.left + mm(1.5), y + mm(2), { width: mm(24) })
+          .text("Fälligkeit", mm(62), y + mm(2), { width: mm(45) })
+          .text("Betrag", mm(142), y + mm(2), { width: mm(47), align: "right" });
+        pdf.strokeColor(DIN5008_DESIGN.colors.line).lineWidth(0.55).moveTo(LAYOUT.left, y + mm(6.6)).lineTo(LAYOUT.right, y + mm(6.6)).stroke();
+        y += mm(7.8);
+      };
+      header();
+      items.forEach((item, index) => {
+        const rowHeight = mm(7.5);
+        if (y + rowHeight > LAYOUT.contentBottom) { newPage(); header(); }
+        if (index % 2 === 1) pdf.fillColor("#FBFCFD").rect(LAYOUT.left, y, LAYOUT.contentWidth, rowHeight).fill();
+        pdf.fillColor(DIN5008_DESIGN.colors.ink).fontSize(DIN5008_DESIGN.fontSize.table)
+          .text(String(get(item, "sequenceNumber") ?? ""), LAYOUT.left + mm(1.5), y + mm(1.6), { width: mm(24) })
+          .text(text(get(item, "dueDate")), mm(62), y + mm(1.6), { width: mm(45) })
+          .text(amount(get(item, "plannedAmount")), mm(142), y + mm(1.6), { width: mm(47), align: "right" });
+        pdf.strokeColor(DIN5008_DESIGN.colors.line).lineWidth(0.3).moveTo(LAYOUT.left, y + rowHeight).lineTo(LAYOUT.right, y + rowHeight).stroke();
+        y += rowHeight;
+      });
+      y += DIN5008_DESIGN.spacing.s;
+    }
+  }
 
   drawSectionTitle("Forderungsübersicht");
   const rows = Array.isArray(get(statement, "rows")) ? get(statement, "rows") as StatementRow[] : [];

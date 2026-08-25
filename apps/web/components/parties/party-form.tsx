@@ -100,16 +100,17 @@ export function PartyForm({
   const contacts = useFieldArray({ control: form.control, name: "contacts" });
   const type = form.watch("type");
   const submit = form.handleSubmit(async (v) => {
+    const { street, houseNumber, addressLine2, postalCode, city, ...partyValues } = v;
     const data: PartyInput = {
-      ...v,
+      ...partyValues,
       addresses: [
         {
           type: "PRIMARY",
-          street: v.street,
-          houseNumber: v.houseNumber,
-          addressLine2: v.addressLine2,
-          postalCode: v.postalCode,
-          city: v.city,
+          street,
+          houseNumber,
+          addressLine2,
+          postalCode,
+          city,
           country: "DE",
           isPrimary: true,
         },
