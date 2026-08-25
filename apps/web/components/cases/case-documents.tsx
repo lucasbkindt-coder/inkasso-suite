@@ -5,7 +5,12 @@ import { Download, FilePlus2, FileText, Loader2, X, XCircle } from "lucide-react
 import * as React from "react";
 
 import { Button } from "@/components/ui/button";
-import type { CaseDocument, DocumentPreview, DocumentTemplate } from "@/types/case";
+import type {
+  CaseDocument,
+  DocumentDelivery,
+  DocumentPreview,
+  DocumentTemplate,
+} from "@/types/case";
 
 import { caseApi } from "./case-api";
 import { formatDate } from "./case-ui";
@@ -91,12 +96,13 @@ export function CaseDocuments({ caseId }: { caseId: string }) {
         <p className="mt-5 text-sm text-muted-foreground">Dokumente werden geladen …</p>
       ) : (
         <div className="mt-5 overflow-x-auto">
-          <table className="min-w-[760px] w-full text-left text-sm">
+          <table className="min-w-[860px] w-full text-left text-sm">
             <thead className="border-b text-xs uppercase text-muted-foreground">
               <tr>
                 <th className="p-3">Dokumentname</th>
                 <th className="p-3">Typ</th>
                 <th className="p-3">Status</th>
+                <th className="p-3">Zustellung</th>
                 <th className="p-3">Vorlage</th>
                 <th className="p-3">Version</th>
                 <th className="p-3">Erstellt am</th>
@@ -112,6 +118,9 @@ export function CaseDocuments({ caseId }: { caseId: string }) {
                   <td className="p-3">{document.type}</td>
                   <td className="p-3">
                     <StatusBadge status={document.status} />
+                  </td>
+                  <td className="p-3">
+                    <DeliveryBadge delivery={document.deliveries?.find((item) => item.channel === "EMAIL")} />
                   </td>
                   <td className="p-3">{document.template?.name ?? "—"}</td>
                   <td className="p-3">
@@ -313,5 +322,28 @@ function StatusBadge({ status }: { status: CaseDocument["status"] }) {
   };
   return (
     <span className={`rounded-full px-2 py-1 text-xs ${classes[status]}`}>{labels[status]}</span>
+  );
+}
+
+function DeliveryBadge({ delivery }: { delivery?: DocumentDelivery }) {
+  if (!delivery) return <span className="text-muted-foreground">—</span>;
+
+  const labels: Record<DocumentDelivery["status"], string> = {
+    PENDING: "E-Mail ausstehend",
+    SENT: "E-Mail protokolliert",
+    FAILED: "E-Mail fehlgeschlagen",
+    SKIPPED: "Keine E-Mail-Adresse",
+  };
+  const classes: Record<DocumentDelivery["status"], string> = {
+    PENDING: "bg-amber-500/10 text-amber-700 dark:text-amber-300",
+    SENT: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+    FAILED: "bg-destructive/10 text-destructive",
+    SKIPPED: "bg-muted text-muted-foreground",
+  };
+
+  return (
+    <span className={`rounded-full px-2 py-1 text-xs ${classes[delivery.status]}`} title={delivery.errorMessage ?? undefined}>
+      {labels[delivery.status]}
+    </span>
   );
 }

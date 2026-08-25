@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
-import { DocumentStatus, PortalAccountStatus, PortalAccountType, Prisma, TemplateStatus } from "@prisma/client";
+import { DocumentDeliveryChannel, DocumentDeliveryStatus, DocumentStatus, PortalAccountStatus, PortalAccountType, Prisma, TemplateStatus } from "@prisma/client";
 import QRCode from "qrcode";
 import { PortalAuthService } from "../portal-auth/portal-auth.service";
 import { PrismaService } from "../prisma/prisma.service";
@@ -9,6 +9,7 @@ import { LocalDocumentStorage } from "./local-document-storage";
 import { TenantDocumentSettingsDto } from "./dto/tenant-document-settings.dto";
 import { TemplateDto } from "./dto/template.dto";
 import { renderDin5008Document } from "./din5008-layout";
+import { MailService } from "./mail.service";
 
 const INITIAL_DEBTOR_PORTAL_TEMPLATE_KEYS = new Set(["payment-request"]);
 
@@ -35,6 +36,7 @@ export class DocumentsService {
     private readonly tenant: TenantContextService,
     private readonly storage: LocalDocumentStorage,
     private readonly portalAuth: PortalAuthService,
+    private readonly mail: MailService,
   ) {}
   async settings() {
     const tenantId = await this.tenant.getTenantId();
@@ -118,7 +120,20 @@ export class DocumentsService {
     await this.caseData(caseId, tenantId);
     return this.prisma.caseDocument.findMany({
       where: { tenantId, caseId },
-      include: { template: { select: { name: true, key: true } } },
+      include: {
+        template: { select: { name: true, key: true } },
+        deliveries: {
+          select: {
+            channel: true,
+            status: true,
+            recipient: true,
+            attemptedAt: true,
+            sentAt: true,
+            failedAt: true,
+            errorMessage: true,
+          },
+        },
+      },
       orderBy: { generatedAt: "desc" },
     });
   }
@@ -126,7 +141,7 @@ export class DocumentsService {
     const tenantId = await this.tenant.getTenantId();
     const document = await this.prisma.caseDocument.findFirst({
       where: { id, caseId, tenantId },
-      include: { template: true },
+      include: { template: true, deliveries: true },
     });
     if (!document) throw new NotFoundException("Dokument wurde nicht gefunden.");
     return document;
@@ -155,8 +170,14 @@ export class DocumentsService {
     ]);
     const subject = this.render(template.subject ?? template.name, snapshot);
     const renderedBody = this.render(template.bodyTemplate, snapshot);
+    if (template.key === "payment-request") {
+      const statement = snapshot.claimStatement as { rows: unknown[]; grandTotal: string };
+      if (!statement.rows.length || new Prisma.Decimal(statement.grandTotal).lte(0))
+        throw new BadRequestException("Ein Forderungsschreiben benötigt eine offene Forderungsposition.");
+    }
     let activation: { portalAccountId: string; activationId: string } | undefined;
     let storageKey: string | undefined;
+    let documentPersisted = false;
     try {
       const portal = await this.portalBlock(template.key, caseData.debtorPartyId, tenantId);
       if (portal?.activation) activation = portal.activation;
@@ -170,7 +191,7 @@ export class DocumentsService {
       const documentStorageKey = await this.storage.save(pdf);
       storageKey = documentStorageKey;
       const filename = `payveo-${String((snapshot as { case: { caseNumber: string } }).case.caseNumber).replace(/\//g, "-")}-${Date.now()}.pdf`;
-      return await this.prisma.$transaction(async (tx) => {
+      const document = await this.prisma.$transaction(async (tx) => {
         const document = await tx.caseDocument.create({
           data: {
             tenantId,
@@ -198,9 +219,12 @@ export class DocumentsService {
         }
         return document;
       });
+      documentPersisted = true;
+      if (template.key === "payment-request") await this.deliverPaymentRequest(document.id, tenantId, caseData.debtorPartyId);
+      return document;
     } catch (error) {
-      if (storageKey) await this.storage.remove(storageKey);
-      if (activation) {
+      if (storageKey && !documentPersisted) await this.storage.remove(storageKey);
+      if (activation && !documentPersisted) {
         await this.portalAuth.discardActivation(activation.portalAccountId, activation.activationId);
       }
       throw error;
@@ -287,6 +311,15 @@ export class DocumentsService {
     const document = await this.get(caseId, id);
     return { filename: document.filename, buffer: await this.storage.read(document.storageKey) };
   }
+  async retryEmail(documentId: string) {
+    const tenantId = await this.tenant.getTenantId();
+    const delivery = await this.prisma.documentDelivery.findFirst({ where: { documentId, tenantId, channel: DocumentDeliveryChannel.EMAIL } });
+    if (!delivery) throw new NotFoundException("E-Mail-Versand wurde nicht gefunden.");
+    if (delivery.status !== DocumentDeliveryStatus.FAILED) throw new BadRequestException("Nur fehlgeschlagene E-Mail-Versände können wiederholt werden.");
+    const document = await this.prisma.caseDocument.findFirst({ where: { id: documentId, tenantId } });
+    if (!document || !delivery.recipient) throw new BadRequestException("Ein E-Mail-Versand ist nicht möglich.");
+    try { const sent = await this.mail.send({ to: delivery.recipient, subject: delivery.subject, text: `Guten Tag,\n\nanbei erhalten Sie das Forderungsschreiben.\n\nMit freundlichen Grüßen\npayveo`, attachments: [{ filename: document.filename, contentType: "application/pdf", content: await this.storage.read(document.storageKey) }] }); return this.prisma.documentDelivery.update({ where: { id: delivery.id }, data: { status: DocumentDeliveryStatus.SENT, attemptedAt: new Date(), sentAt: new Date(), provider: sent.provider, providerMessageId: sent.providerMessageId, errorCode: null, errorMessage: null } }); } catch (error) { return this.prisma.documentDelivery.update({ where: { id: delivery.id }, data: { attemptedAt: new Date(), failedAt: new Date(), errorCode: "MAIL_SEND_FAILED", errorMessage: error instanceof Error ? error.message : "Mailversand fehlgeschlagen." } }); }
+  }
   private async template(dto: DocumentRenderDto, tenantId: string) {
     if (!dto.templateId && !dto.templateKey)
       throw new BadRequestException("Eine Dokumentvorlage ist erforderlich.");
@@ -314,7 +347,7 @@ export class DocumentsService {
       include: {
         claim: true,
         clientParty: { include: { addresses: { where: { deletedAt: null, isPrimary: true } } } },
-        debtorParty: { include: { addresses: { where: { deletedAt: null, isPrimary: true } } } },
+        debtorParty: { include: { addresses: { where: { deletedAt: null, isPrimary: true } }, contacts: { where: { deletedAt: null, type: "EMAIL" }, orderBy: [{ isPrimary: "desc" }, { createdAt: "asc" }] } } },
       },
     });
     if (!value || !value.claim)
@@ -358,6 +391,13 @@ export class DocumentsService {
     const openPrincipal = open(["PRINCIPAL"]);
     const openInterest = open(["INTEREST"]);
     const openCosts = open(["COLLECTION_FEE", "EXPENSE", "COURT_COST", "ENFORCEMENT_COST"]);
+    const costTypes = new Set(["COLLECTION_FEE", "EXPENSE", "COURT_COST", "ENFORCEMENT_COST"]);
+    const rows = entries.filter((entry) => entry.side === "DEBIT").map((entry) => {
+      const allocated = entry.targetAllocations.reduce((sum, allocation) => sum.plus(allocation.amount), new Prisma.Decimal(0));
+      const remaining = Prisma.Decimal.max(0, entry.amount.minus(allocated));
+      return { date: this.date(entry.bookingDate), description: entry.description, principalAmount: entry.type === "PRINCIPAL" ? remaining.toFixed(2) : "0.00", costAmount: costTypes.has(entry.type) ? remaining.toFixed(2) : "0.00", interestAmount: entry.type === "INTEREST" ? remaining.toFixed(2) : "0.00" };
+    }).filter((row) => new Prisma.Decimal(row.principalAmount).plus(row.costAmount).plus(row.interestAmount).gt(0));
+    const claimStatement = { asOf: new Date().toISOString(), caseId, caseNumber: data.caseNumber, currency: claim.currency, rows, principalTotal: openPrincipal, costTotal: openCosts, interestTotal: openInterest, grandTotal: new Prisma.Decimal(openPrincipal).plus(openCosts).plus(openInterest).toFixed(2) };
     return {
       case: { caseNumber: data.caseNumber },
       client: { displayName: data.clientParty.displayName, address: address(data.clientParty) },
@@ -374,6 +414,7 @@ export class DocumentsService {
         openCosts,
         openTotal: new Prisma.Decimal(openPrincipal).plus(openInterest).plus(openCosts).toFixed(2),
       },
+      claimStatement,
       payments: {
         total: entries
           .filter((entry) => entry.type === "PAYMENT" && entry.side === "CREDIT")
@@ -397,6 +438,15 @@ export class DocumentsService {
       },
       today: this.date(new Date()),
     } as Record<string, unknown>;
+  }
+  private async deliverPaymentRequest(documentId: string, tenantId: string, debtorPartyId: string) {
+    const document = await this.prisma.caseDocument.findFirst({ where: { id: documentId, tenantId }, include: { case: { include: { debtorParty: { include: { contacts: { where: { deletedAt: null, type: "EMAIL" }, orderBy: [{ isPrimary: "desc" }, { createdAt: "asc" }] } } } } } } });
+    if (!document) return;
+    const recipient = document.case.debtorParty.contacts[0]?.value;
+    const subject = `Forderungsangelegenheit – Aktenzeichen ${document.dataSnapshot && typeof document.dataSnapshot === "object" ? (document.dataSnapshot as { case?: { caseNumber?: string } }).case?.caseNumber ?? document.caseId : document.caseId}`;
+    const delivery = await this.prisma.documentDelivery.upsert({ where: { documentId_channel: { documentId, channel: DocumentDeliveryChannel.EMAIL } }, update: {}, create: { tenantId, documentId, caseId: document.caseId, channel: DocumentDeliveryChannel.EMAIL, status: recipient ? DocumentDeliveryStatus.PENDING : DocumentDeliveryStatus.SKIPPED, recipient, subject } });
+    if (!recipient || delivery.status === DocumentDeliveryStatus.SENT) return;
+    try { const sent = await this.mail.send({ to: recipient, subject, text: `Guten Tag,\n\nanbei erhalten Sie das Forderungsschreiben zu Ihrem Aktenzeichen ${subject.split(" ").at(-1)}.\n\nMit freundlichen Grüßen\npayveo`, attachments: [{ filename: document.filename, contentType: "application/pdf", content: await this.storage.read(document.storageKey) }] }); await this.prisma.documentDelivery.update({ where: { id: delivery.id }, data: { status: DocumentDeliveryStatus.SENT, attemptedAt: new Date(), sentAt: new Date(), provider: sent.provider, providerMessageId: sent.providerMessageId, errorCode: null, errorMessage: null } }); } catch (error) { await this.prisma.documentDelivery.update({ where: { id: delivery.id }, data: { status: DocumentDeliveryStatus.FAILED, attemptedAt: new Date(), failedAt: new Date(), errorCode: "MAIL_SEND_FAILED", errorMessage: error instanceof Error ? error.message : "Mailversand fehlgeschlagen." } }); }
   }
   private render(template: string, snapshot: Record<string, unknown>) {
     return template.replace(/{{\s*([\w.]+)\s*}}/g, (_match, path: string) => {

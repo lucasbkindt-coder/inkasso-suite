@@ -76,6 +76,7 @@ export class DocumentsController {
   ) {
     return this.documents.void(caseId, documentId);
   }
+  @Post("documents/:documentId/deliveries/email/retry") retryEmail(@Param("documentId", ParseUUIDPipe) documentId: string) { return this.documents.retryEmail(documentId); }
   @Get("cases/:caseId/documents/:documentId/download")
   @Header("Content-Type", "application/pdf")
   async download(

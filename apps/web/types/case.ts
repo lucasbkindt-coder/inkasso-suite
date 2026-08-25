@@ -291,7 +291,18 @@ export type CaseDocument = {
   renderedSubject: string | null;
   generatedAt: string;
   template?: { name: string; key: string } | null;
+  deliveries?: DocumentDelivery[];
   voidedAt?: string | null;
+};
+
+export type DocumentDelivery = {
+  channel: "EMAIL";
+  status: "PENDING" | "SENT" | "FAILED" | "SKIPPED";
+  recipient: string | null;
+  attemptedAt: string | null;
+  sentAt: string | null;
+  failedAt: string | null;
+  errorMessage: string | null;
 };
 
 export type RvgScenario =
