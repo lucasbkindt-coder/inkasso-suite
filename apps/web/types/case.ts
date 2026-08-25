@@ -84,6 +84,7 @@ export type Case = {
   clientParty: CaseParty;
   debtorParty: CaseParty;
   ownerMembership: CaseOwner;
+  assignedMembership: CaseOwner;
 };
 
 export type CasesResponse = {
@@ -114,6 +115,7 @@ export type UpdateCaseInput = Partial<
   Pick<Case, "status" | "phase" | "priority" | "internalNotes">
 > & {
   ownerMembershipId?: string;
+  assignedMembershipId?: string | null;
   claim?: Partial<Omit<CreateCaseInput["claim"], "defaultDate">> & { defaultDate?: string };
 };
 

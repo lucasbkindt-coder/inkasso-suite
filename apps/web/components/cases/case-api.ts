@@ -49,6 +49,9 @@ export type CasesQuery = {
   priority?: string;
   clientPartyId?: string;
   debtorPartyId?: string;
+  assignedMembershipId?: string;
+  mine?: boolean;
+  unassigned?: boolean;
   deleted?: boolean;
 };
 export type TasksQuery = {
@@ -77,6 +80,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${apiUrl}${path}`, {
     ...init,
     cache: "no-store",
+    credentials: "include",
     headers: { "Content-Type": "application/json", ...init?.headers },
   });
   if (!response.ok) {
@@ -175,6 +179,9 @@ export const caseApi = {
     request<Case>(`/cases/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
   deleteCase: (id: string) => request<void>(`/cases/${id}`, { method: "DELETE" }),
   restoreCase: (id: string) => request<Case>(`/cases/${id}/restore`, { method: "POST" }),
+  assignCase: (id: string, membershipId: string | null) =>
+    request<Case>(`/cases/${id}/assignee`, { method: "POST", body: JSON.stringify({ membershipId }) }),
+  getStaffMembers: () => request<{ membershipId: string; displayName: string; email: string; roles: string[] }[]>("/staff/members"),
   getTasks: (query: TasksQuery = {}) => {
     const suffix = queryString(query);
     return request<TasksResponse>(`/tasks${suffix ? `?${suffix}` : ""}`);

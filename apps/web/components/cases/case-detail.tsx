@@ -14,6 +14,7 @@ import { CaseTabs } from "./case-tabs";
 import { CaseTimeline } from "./case-timeline";
 import { CaseTasks } from "./case-tasks";
 import { CaseInstallmentPlan } from "./case-installment-plan";
+import { CaseAssignee } from "./case-assignee";
 
 export function CaseDetail() {
   const params = useParams<{ id: string }>();
@@ -50,6 +51,7 @@ export function CaseDetail() {
       <CaseHeader caseRecord={caseRecord} />
       <div className="grid gap-6 xl:grid-cols-[2fr_1fr]">
         <div className="space-y-6">
+          <CaseAssignee caseRecord={caseRecord} onAssigned={setCaseRecord} />
           <CaseTabs />
           <CaseOverview caseRecord={caseRecord} />
           <CaseInstallmentPlan caseId={caseRecord.id} />

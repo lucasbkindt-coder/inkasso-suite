@@ -9,28 +9,32 @@ import {
   Patch,
   Post,
   Query,
+  UseGuards,
 } from "@nestjs/common";
+import { RequireStaffPermissions } from "../staff-auth/staff-permission.decorator";
+import { StaffPermissionGuard } from "../staff-auth/staff-permission.guard";
 import { DebtorsService } from "./debtors.service";
 import { CreateDebtorDto } from "./dto/create-debtor.dto";
 import { QueryDebtorsDto } from "./dto/query-debtors.dto";
 import { UpdateDebtorDto } from "./dto/update-debtor.dto";
 
 @Controller("debtors")
+@UseGuards(StaffPermissionGuard)
 export class DebtorsController {
   constructor(private readonly debtorsService: DebtorsService) {}
-  @Post() create(@Body() dto: CreateDebtorDto) {
+  @Post() @RequireStaffPermissions("debtor:create") create(@Body() dto: CreateDebtorDto) {
     return this.debtorsService.create(dto);
   }
-  @Get() findAll(@Query() query: QueryDebtorsDto) {
+  @Get() @RequireStaffPermissions("debtor:read") findAll(@Query() query: QueryDebtorsDto) {
     return this.debtorsService.findAll(query);
   }
-  @Get(":id") findOne(@Param("id", ParseUUIDPipe) id: string) {
+  @Get(":id") @RequireStaffPermissions("debtor:read") findOne(@Param("id", ParseUUIDPipe) id: string) {
     return this.debtorsService.findOne(id);
   }
-  @Patch(":id") update(@Param("id", ParseUUIDPipe) id: string, @Body() dto: UpdateDebtorDto) {
+  @Patch(":id") @RequireStaffPermissions("debtor:update") update(@Param("id", ParseUUIDPipe) id: string, @Body() dto: UpdateDebtorDto) {
     return this.debtorsService.update(id, dto);
   }
-  @Delete(":id") @HttpCode(204) remove(@Param("id", ParseUUIDPipe) id: string) {
+  @Delete(":id") @HttpCode(204) @RequireStaffPermissions("debtor:update") remove(@Param("id", ParseUUIDPipe) id: string) {
     return this.debtorsService.remove(id);
   }
 }

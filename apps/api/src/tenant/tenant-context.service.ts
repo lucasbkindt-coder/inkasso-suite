@@ -1,17 +1,34 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import { Inject, Injectable, Scope, UnauthorizedException } from "@nestjs/common";
+import { REQUEST } from "@nestjs/core";
 import { PrismaService } from "../prisma/prisma.service";
 
-@Injectable()
+export type StaffRequestContext = {
+  userId: string;
+  tenantId: string;
+  tenantMembershipId: string;
+  permissions: string[];
+  roles: string[];
+  passwordMustChange: boolean;
+};
+
+type StaffRequest = { staffAuth?: StaffRequestContext };
+
+@Injectable({ scope: Scope.REQUEST })
 export class TenantContextService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Inject(REQUEST) private readonly request: StaffRequest,
+  ) {}
 
   async getTenantId() {
-    const tenant = await this.prisma.tenant.findFirst({
-      where: { slug: "inkasso-suite", isActive: true, deletedAt: null },
-      select: { id: true },
-    });
-    if (!tenant)
-      throw new NotFoundException("Entwicklungsmandant nicht gefunden. Bitte Seed ausführen.");
-    return tenant.id;
+    const tenantId = this.request.staffAuth?.tenantId;
+    if (!tenantId) throw new UnauthorizedException("Mitarbeiter-Anmeldung erforderlich.");
+    return tenantId;
+  }
+
+  getStaffContext() {
+    const context = this.request.staffAuth;
+    if (!context) throw new UnauthorizedException("Mitarbeiter-Anmeldung erforderlich.");
+    return context;
   }
 }

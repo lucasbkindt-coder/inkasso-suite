@@ -16,10 +16,12 @@ import { ClientSubmissionsModule } from "./client-submissions/client-submissions
 import { PortalAuthModule } from "./portal-auth/portal-auth.module";
 import { InstallmentRequestsModule } from "./installment-requests/installment-requests.module";
 import { InstallmentPlansModule } from "./installment-plans/installment-plans.module";
+import { StaffAuthModule } from "./staff-auth/staff-auth.module";
 
 @Module({
   imports: [
     CoreModule,
+    StaffAuthModule,
     DebtorsModule,
     PartiesModule,
     CasesModule,

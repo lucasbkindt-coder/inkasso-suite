@@ -19,6 +19,7 @@ const {
   TaskStatus,
   TaskType,
 } = require("@prisma/client");
+const argon2 = require("argon2");
 
 const rvg2025Tiers = [
   [500, "51.50"],
@@ -112,10 +113,16 @@ async function main() {
     create: { name: "Inkasso Suite", slug: "inkasso-suite" },
   });
 
+  const adminPasswordHash = await argon2.hash("ChangeMeNow!2026", {
+    type: argon2.argon2id,
+    memoryCost: 19_456,
+    timeCost: 2,
+    parallelism: 1,
+  });
   const admin = await prisma.user.upsert({
     where: { email: "admin@example.com" },
-    update: { deletedAt: null, isActive: true },
-    create: { email: "admin@example.com", displayName: "Tenant Owner" },
+    update: { deletedAt: null, isActive: true, passwordHash: adminPasswordHash, passwordMustChange: false },
+    create: { email: "admin@example.com", displayName: "Tenant Owner", passwordHash: adminPasswordHash },
   });
 
   const membership = await prisma.tenantMembership.upsert({

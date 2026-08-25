@@ -30,6 +30,7 @@ export function CaseTable() {
   const [status, setStatus] = React.useState<CaseStatus | "">("");
   const [phase, setPhase] = React.useState<CasePhase | "">("");
   const [priority, setPriority] = React.useState<CasePriority | "">("");
+  const [assignment, setAssignment] = React.useState<"" | "mine" | "unassigned">("");
   const [page, setPage] = React.useState(1);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState("");
@@ -46,7 +47,7 @@ export function CaseTable() {
   const load = React.useCallback(async () => {
     setLoading(true);
     try {
-      const data = await caseApi.getCases({ page, pageSize: 20, search, status, phase, priority });
+      const data = await caseApi.getCases({ page, pageSize: 20, search, status, phase, priority, mine: assignment === "mine", unassigned: assignment === "unassigned" });
       setResult(data);
       setError("");
     } catch (cause) {
@@ -54,7 +55,7 @@ export function CaseTable() {
     } finally {
       setLoading(false);
     }
-  }, [page, search, status, phase, priority]);
+  }, [page, search, status, phase, priority, assignment]);
 
   React.useEffect(() => {
     void load();
@@ -79,7 +80,7 @@ export function CaseTable() {
       <NewCaseDialog onOpenChange={setDialogOpen} onCreated={() => void load()} open={dialogOpen} />
 
       <div className="rounded-xl border bg-card shadow-sm">
-        <div className="grid gap-3 border-b p-4 lg:grid-cols-[minmax(0,1fr)_repeat(3,auto)]">
+        <div className="grid gap-3 border-b p-4 lg:grid-cols-[minmax(0,1fr)_repeat(4,auto)]">
           <div className="relative">
             <Search className="absolute left-3 top-3 size-4 text-muted-foreground" />
             <input
@@ -103,6 +104,9 @@ export function CaseTable() {
                 {label}
               </option>
             ))}
+          </select>
+          <select className={selectClass} onChange={(event) => { setAssignment(event.target.value as "" | "mine" | "unassigned"); setPage(1); }} value={assignment}>
+            <option value="">Alle Sachbearbeitungen</option><option value="mine">Meine Akten</option><option value="unassigned">Nicht zugewiesen</option>
           </select>
           <select
             className={selectClass}
@@ -197,8 +201,8 @@ export function CaseTable() {
                         </Badge>
                       </td>
                       <td className="px-4 py-4">
-                        {item.ownerMembership?.user.displayName ??
-                          item.ownerMembership?.user.email ??
+                        {item.assignedMembership?.user.displayName ??
+                          item.assignedMembership?.user.email ??
                           "Nicht zugewiesen"}
                       </td>
                       <td className="px-4 py-4 whitespace-nowrap">{formatDate(item.updatedAt)}</td>

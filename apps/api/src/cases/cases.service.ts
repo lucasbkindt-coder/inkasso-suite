@@ -13,6 +13,7 @@ import {
 
 import { PrismaService } from "../prisma/prisma.service";
 import { TenantContextService } from "../tenant/tenant-context.service";
+import { StaffAuthService } from "../staff-auth/staff-auth.service";
 import { allocateCaseNumber } from "./case-number.service";
 import { CreateCaseDto } from "./dto/create-case.dto";
 import { QueryCasesDto } from "./dto/query-cases.dto";
@@ -31,6 +32,7 @@ const caseDetailInclude = {
   clientParty: { include: partyDetailInclude },
   debtorParty: { include: partyDetailInclude },
   ownerMembership: { include: { user: true } },
+  assignedMembership: { include: { user: true } },
 } satisfies Prisma.CaseInclude;
 
 @Injectable()
@@ -38,10 +40,12 @@ export class CasesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly tenantContext: TenantContextService,
+    private readonly staffAuth: StaffAuthService,
   ) {}
 
   async findAll(query: QueryCasesDto) {
     const tenantId = await this.tenantContext.getTenantId();
+    this.staffAuth.requirePermission(this.tenantContext.getStaffContext(), "case:read");
     const where: Prisma.CaseWhereInput = {
       tenantId,
       deletedAt: query.deleted ? { not: null } : null,
@@ -50,6 +54,11 @@ export class CasesService {
       priority: query.priority,
       clientPartyId: query.clientPartyId,
       debtorPartyId: query.debtorPartyId,
+      assignedMembershipId: query.mine
+        ? this.tenantContext.getStaffContext().tenantMembershipId
+        : query.unassigned
+          ? null
+          : query.assignedMembershipId,
     };
 
     if (query.search) {
@@ -82,12 +91,14 @@ export class CasesService {
   }
 
   async findOne(id: string) {
+    this.staffAuth.requirePermission(this.tenantContext.getStaffContext(), "case:read");
     return this.getCase(id, await this.tenantContext.getTenantId(), true);
   }
 
   async findByNumber(caseNumber: string) {
     if (!caseNumber?.trim()) throw new BadRequestException("Aktenzeichen ist erforderlich.");
     const tenantId = await this.tenantContext.getTenantId();
+    this.staffAuth.requirePermission(this.tenantContext.getStaffContext(), "case:read");
     const caseRecord = await this.prisma.case.findFirst({
       where: { tenantId, caseNumber: caseNumber.trim(), deletedAt: null },
       include: caseDetailInclude,
@@ -98,6 +109,7 @@ export class CasesService {
 
   async create(dto: CreateCaseDto) {
     const tenantId = await this.tenantContext.getTenantId();
+    this.staffAuth.requirePermission(this.tenantContext.getStaffContext(), "case:create");
     await this.assertPartyRole(dto.clientPartyId, tenantId, PartyRoleType.CLIENT, "Auftraggeber");
     await this.assertPartyRole(dto.debtorPartyId, tenantId, PartyRoleType.DEBTOR, "Schuldner");
     if (dto.ownerMembershipId) await this.assertOwner(dto.ownerMembershipId, tenantId);
@@ -155,6 +167,7 @@ export class CasesService {
 
   async update(id: string, dto: UpdateCaseDto) {
     const tenantId = await this.tenantContext.getTenantId();
+    this.staffAuth.requirePermission(this.tenantContext.getStaffContext(), "case:update");
     const existing = await this.getCase(id, tenantId, true);
     if (dto.ownerMembershipId) await this.assertOwner(dto.ownerMembershipId, tenantId);
 
@@ -207,17 +220,28 @@ export class CasesService {
 
   async remove(id: string) {
     const tenantId = await this.tenantContext.getTenantId();
+    this.staffAuth.requirePermission(this.tenantContext.getStaffContext(), "case:update");
     await this.getCase(id, tenantId, true);
     await this.prisma.case.update({ where: { id }, data: { deletedAt: new Date() } });
   }
 
   async restore(id: string) {
     const tenantId = await this.tenantContext.getTenantId();
+    this.staffAuth.requirePermission(this.tenantContext.getStaffContext(), "case:update");
     const caseRecord = await this.prisma.case.findFirst({
       where: { id, tenantId, deletedAt: { not: null } },
     });
     if (!caseRecord) throw new NotFoundException("Gelöschte Akte wurde nicht gefunden.");
     await this.prisma.case.update({ where: { id }, data: { deletedAt: null } });
+    return this.getCase(id, tenantId, true);
+  }
+
+  async assign(id: string, membershipId: string | null) {
+    const tenantId = await this.tenantContext.getTenantId();
+    this.staffAuth.requirePermission(this.tenantContext.getStaffContext(), "case:assign");
+    await this.getCase(id, tenantId, true);
+    if (membershipId) await this.assertOwner(membershipId, tenantId);
+    await this.prisma.case.update({ where: { id }, data: { assignedMembershipId: membershipId } });
     return this.getCase(id, tenantId, true);
   }
 
@@ -238,9 +262,9 @@ export class CasesService {
   private async assertOwner(membershipId: string, tenantId: string) {
     const membership = await this.prisma.tenantMembership.findFirst({
       where: { id: membershipId, tenantId, deletedAt: null, status: MembershipStatus.ACTIVE },
-      select: { id: true },
+      select: { id: true, user: { select: { isActive: true, deletedAt: true } } },
     });
-    if (!membership)
+    if (!membership || !membership.user.isActive || membership.user.deletedAt)
       throw new BadRequestException(
         "Verantwortliche Mitgliedschaft ist nicht aktiv oder gehört nicht zum Mandanten.",
       );

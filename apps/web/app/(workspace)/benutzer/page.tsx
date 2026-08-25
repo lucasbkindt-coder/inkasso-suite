@@ -1,10 +1,3 @@
-import { PagePlaceholder } from "@/components/page-placeholder";
+import { StaffMembersPage } from "@/components/staff-auth/staff-members-page";
 
-export default function UsersPage() {
-  return (
-    <PagePlaceholder
-      description="Benutzerverwaltung und Zugriffszuweisungen folgen zu einem späteren Zeitpunkt."
-      title="Benutzer"
-    />
-  );
-}
+export default function UsersPage() { return <StaffMembersPage />; }

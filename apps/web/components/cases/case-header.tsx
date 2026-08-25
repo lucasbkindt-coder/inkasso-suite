@@ -16,8 +16,8 @@ import {
 
 export function CaseHeader({ caseRecord }: { caseRecord: Case }) {
   const owner =
-    caseRecord.ownerMembership?.user.displayName ??
-    caseRecord.ownerMembership?.user.email ??
+    caseRecord.assignedMembership?.user.displayName ??
+    caseRecord.assignedMembership?.user.email ??
     "Nicht zugewiesen";
   return (
     <section className="rounded-2xl border bg-card p-6 shadow-sm sm:p-8">

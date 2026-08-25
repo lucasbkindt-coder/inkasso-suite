@@ -723,7 +723,8 @@ export class ClientSubmissionsService {
   }
 
   private async currentMembershipId(_tx: Prisma.TransactionClient, _tenantId: string) {
-    // The current development tenant context has no authenticated membership identity yet.
-    return undefined;
+    const context = this.tenant.getStaffContext();
+    if (context.tenantId !== _tenantId) throw new NotFoundException("Mitgliedschaft wurde nicht gefunden.");
+    return context.tenantMembershipId;
   }
 }

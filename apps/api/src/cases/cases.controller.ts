@@ -15,6 +15,7 @@ import { CasesService } from "./cases.service";
 import { CreateCaseDto } from "./dto/create-case.dto";
 import { QueryCasesDto } from "./dto/query-cases.dto";
 import { UpdateCaseDto } from "./dto/update-case.dto";
+import { AssignCaseDto } from "./dto/assign-case.dto";
 
 @Controller("cases")
 export class CasesController {
@@ -43,6 +44,11 @@ export class CasesController {
   @Patch(":id")
   update(@Param("id", ParseUUIDPipe) id: string, @Body() dto: UpdateCaseDto) {
     return this.casesService.update(id, dto);
+  }
+
+  @Post(":id/assignee")
+  assign(@Param("id", ParseUUIDPipe) id: string, @Body() dto: AssignCaseDto) {
+    return this.casesService.assign(id, dto.membershipId ?? null);
   }
 
   @Delete(":id")

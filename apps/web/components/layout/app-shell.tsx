@@ -6,13 +6,46 @@ import { usePathname } from "next/navigation";
 import * as React from "react";
 
 import { ThemeToggle } from "@/components/theme-toggle";
+import { StaffProfile } from "@/components/staff-auth/staff-profile";
 import { Button } from "@/components/ui/button";
+import { staffAuthApi } from "@/lib/staff-auth-api";
 import { cn } from "@/lib/utils";
 
 import { isNavigationItemActive, navigationGroups, resolvePageTitle } from "./navigation";
 
+const navigationPermissions: Record<string, string[]> = {
+  "/": ["report:read"],
+  "/akten": ["case:read"],
+  "/parteien": ["debtor:read"],
+  "/schuldner": ["debtor:read"],
+  "/aufgaben": ["case:read"],
+  "/auftragseingang": ["case:read"],
+  "/ratenanfragen": ["case:read"],
+  "/mandanten": ["tenant:read"],
+  "/benutzer": ["member:read"],
+  "/teams": ["team:read"],
+  "/rollen": ["role:read"],
+  "/einstellungen": ["settings:read"],
+};
+
 function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
+  const [permissions, setPermissions] = React.useState<string[] | null>(null);
+
+  React.useEffect(() => {
+    let active = true;
+    staffAuthApi.session().then((session) => {
+      if (active) setPermissions(session.permissions);
+    }).catch(() => {
+      if (active) setPermissions([]);
+    });
+    return () => { active = false; };
+  }, []);
+
+  const groups = navigationGroups.map((group) => ({
+    ...group,
+    items: group.items.filter((item) => permissions === null || (navigationPermissions[item.href] ?? []).every((permission) => permissions.includes(permission))),
+  })).filter((group) => group.items.length > 0);
 
   return (
     <aside className="flex h-full w-72 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground">
@@ -27,7 +60,7 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
       </div>
 
       <nav className="flex-1 space-y-6 overflow-y-auto px-3 py-5" aria-label="Hauptnavigation">
-        {navigationGroups.map((group) => (
+        {groups.map((group) => (
           <div key={group.label}>
             <p className="mb-2 px-3 text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">
               {group.label}
@@ -128,12 +161,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </div>
           <div className="flex items-center gap-2">
             <ThemeToggle />
-            <div className="hidden items-center gap-2 border-l border-border pl-3 sm:flex">
-              <div className="grid size-8 place-items-center rounded-full bg-muted text-xs font-semibold">
-                IS
-              </div>
-              <span className="text-sm font-medium">Arbeitsbereich</span>
-            </div>
+            <StaffProfile />
           </div>
         </header>
 

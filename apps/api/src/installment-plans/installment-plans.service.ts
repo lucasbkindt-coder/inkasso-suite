@@ -13,6 +13,7 @@ export class InstallmentPlansService {
 
   async createFromRequest(requestId: string) {
     const tenantId = await this.tenant.getTenantId();
+    const createdByMembershipId = this.tenant.getStaffContext().tenantMembershipId;
     return this.prisma.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`installment-plan-request:${requestId}`}))`;
       const request = await tx.installmentRequest.findFirst({ where: { id: requestId, tenantId }, include: { case: { select: { id: true, debtorPartyId: true, deletedAt: true } } } });
@@ -32,7 +33,7 @@ export class InstallmentPlansService {
       const minimumCount = openAmount.dividedBy(monthly).ceil().toNumber();
       if (request.numberOfInstallments && count < minimumCount) throw new BadRequestException("Die gewünschte Anzahl reicht für die vereinbarte Monatsrate nicht aus.");
       const amounts = this.amounts(openAmount, monthly, count);
-      const plan = await tx.installmentPlan.create({ data: { tenantId, caseId: request.caseId, debtorPartyId: request.debtorPartyId, sourceRequestId: request.id, initialOpenAmount: openAmount, plannedInstallmentAmount: monthly, startDate: request.preferredStartDate, numberOfInstallments: amounts.length, items: { create: amounts.map((amount, index) => ({ tenantId, sequenceNumber: index + 1, dueDate: this.monthDate(request.preferredStartDate, index), plannedAmount: amount })) } }, include: { items: { orderBy: { sequenceNumber: "asc" } } } });
+      const plan = await tx.installmentPlan.create({ data: { tenantId, caseId: request.caseId, debtorPartyId: request.debtorPartyId, sourceRequestId: request.id, initialOpenAmount: openAmount, plannedInstallmentAmount: monthly, startDate: request.preferredStartDate, numberOfInstallments: amounts.length, createdByMembershipId, items: { create: amounts.map((amount, index) => ({ tenantId, sequenceNumber: index + 1, dueDate: this.monthDate(request.preferredStartDate, index), plannedAmount: amount })) } }, include: { items: { orderBy: { sequenceNumber: "asc" } } } });
       return this.readModel(plan, [], openAmount);
     });
   }
@@ -64,7 +65,7 @@ export class InstallmentPlansService {
         await tx.installmentPlan.update({ where: { id }, data: { status: InstallmentPlanStatus.ACTIVE, activatedAt: now } });
       } else if (action === "cancel") {
         if (!planOpen.includes(plan.status)) throw new ConflictException("Dieser Ratenplan kann nicht storniert werden.");
-        await tx.installmentPlan.update({ where: { id }, data: { status: InstallmentPlanStatus.CANCELLED, cancelledAt: now } });
+        await tx.installmentPlan.update({ where: { id }, data: { status: InstallmentPlanStatus.CANCELLED, cancelledAt: now, cancelledByMembershipId: this.tenant.getStaffContext().tenantMembershipId } });
         await tx.installmentPlanItem.updateMany({ where: { planId: id }, data: { status: InstallmentPlanItemStatus.CANCELLED } });
       } else {
         const model = await this.hydrate(plan);

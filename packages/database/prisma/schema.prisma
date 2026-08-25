@@ -252,15 +252,18 @@ enum DocumentDeliveryStatus {
 }
 
 model User {
-  id          String    @id @default(uuid()) @db.Uuid
-  email       String    @unique
-  displayName String?
-  isActive    Boolean   @default(true)
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  deletedAt   DateTime?
+  id                 String    @id @default(uuid()) @db.Uuid
+  email              String    @unique
+  displayName        String?
+  passwordHash       String?
+  passwordMustChange Boolean   @default(false)
+  isActive           Boolean   @default(true)
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+  deletedAt          DateTime?
 
   memberships TenantMembership[]
+  staffSessions StaffSession[]
 
   @@index([deletedAt])
 }
@@ -357,6 +360,7 @@ model Tenant {
   installmentRequests InstallmentRequest[]
   installmentPlans    InstallmentPlan[]
   installmentPlanItems InstallmentPlanItem[]
+  staffSessions       StaffSession[]
 
   @@index([deletedAt])
 }
@@ -370,6 +374,7 @@ model Case {
   clientPartyId      String                @db.Uuid
   debtorPartyId      String                @db.Uuid
   ownerMembershipId  String?               @db.Uuid
+  assignedMembershipId String?             @db.Uuid
   status             CaseStatus            @default(OPEN)
   phase              CasePhase             @default(NEW)
   priority           CasePriority          @default(NORMAL)
@@ -383,6 +388,7 @@ model Case {
   clientParty        Party                 @relation("CaseClient", fields: [clientPartyId], references: [id], onDelete: Restrict)
   debtorParty        Party                 @relation("CaseDebtor", fields: [debtorPartyId], references: [id], onDelete: Restrict)
   ownerMembership    TenantMembership?     @relation(fields: [ownerMembershipId], references: [id], onDelete: Restrict)
+  assignedMembership TenantMembership?     @relation("AssignedCases", fields: [assignedMembershipId], references: [id], onDelete: Restrict)
   claim              Claim?
   ledgerEntries      CaseLedgerEntry[]
   costCalculations   CaseCostCalculation[]
@@ -401,6 +407,7 @@ model Case {
   @@index([clientPartyId])
   @@index([debtorPartyId])
   @@index([ownerMembershipId])
+  @@index([tenantId, assignedMembershipId, deletedAt])
 }
 
 model CaseCostCalculation {
@@ -775,15 +782,21 @@ model InstallmentPlan {
   activatedAt              DateTime?
   completedAt              DateTime?
   cancelledAt              DateTime?
+  createdByMembershipId    String?               @db.Uuid
+  cancelledByMembershipId  String?               @db.Uuid
 
   tenant        Tenant             @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   case          Case               @relation(fields: [caseId], references: [id], onDelete: Restrict)
   debtorParty   Party              @relation(fields: [debtorPartyId], references: [id], onDelete: Restrict)
+  createdByMembership TenantMembership? @relation("CreatedInstallmentPlans", fields: [createdByMembershipId], references: [id], onDelete: Restrict)
+  cancelledByMembership TenantMembership? @relation("CancelledInstallmentPlans", fields: [cancelledByMembershipId], references: [id], onDelete: Restrict)
   sourceRequest InstallmentRequest @relation(fields: [sourceRequestId], references: [id], onDelete: Restrict)
   items         InstallmentPlanItem[]
 
   @@index([tenantId, caseId, status])
   @@index([tenantId, debtorPartyId, status])
+  @@index([createdByMembershipId])
+  @@index([cancelledByMembershipId])
 }
 
 model InstallmentPlanItem {
@@ -991,10 +1004,34 @@ model TenantMembership {
   createdTasks         CaseTask[]          @relation("CreatedTasks")
   reviewedSubmissions  ClientSubmission[]
   reviewedInstallmentRequests InstallmentRequest[]
+  assignedCases      Case[]              @relation("AssignedCases")
+  staffSessions      StaffSession[]
+  createdInstallmentPlans InstallmentPlan[] @relation("CreatedInstallmentPlans")
+  cancelledInstallmentPlans InstallmentPlan[] @relation("CancelledInstallmentPlans")
 
   @@unique([tenantId, userId])
   @@index([userId, deletedAt])
   @@index([tenantId, status, deletedAt])
+}
+
+model StaffSession {
+  id                 String   @id @default(uuid()) @db.Uuid
+  userId             String   @db.Uuid
+  tenantId           String   @db.Uuid
+  tenantMembershipId String   @db.Uuid
+  tokenHash          String   @unique
+  expiresAt          DateTime
+  lastSeenAt         DateTime @default(now())
+  revokedAt          DateTime?
+  createdAt          DateTime @default(now())
+
+  user       User             @relation(fields: [userId], references: [id], onDelete: Restrict)
+  tenant     Tenant           @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  membership TenantMembership @relation(fields: [tenantMembershipId], references: [id], onDelete: Restrict)
+
+  @@index([tenantMembershipId, revokedAt, expiresAt])
+  @@index([userId, tenantId, revokedAt])
+  @@index([expiresAt])
 }
 
 model Team {
