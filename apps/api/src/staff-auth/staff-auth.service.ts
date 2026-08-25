@@ -1,5 +1,5 @@
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException, UnauthorizedException } from "@nestjs/common";
-import { MembershipStatus, Prisma } from "@prisma/client";
+import { MembershipStatus, Prisma, RoleKind } from "@prisma/client";
 import argon2 from "argon2";
 import { createHash, randomBytes } from "node:crypto";
 
@@ -132,6 +132,13 @@ export class StaffAuthService {
     if (!membership) throw new NotFoundException("Mitglied wurde nicht gefunden.");
     const roles = dto.roleIds ? await this.rolesForTenant(context.tenantId, dto.roleIds) : undefined;
     await this.prisma.$transaction(async (tx) => {
+      await this.assertTenantOwnerRemains(
+        tx,
+        context.tenantId,
+        membership,
+        dto.status,
+        roles?.map((role) => role.id),
+      );
       if (dto.status) await tx.tenantMembership.update({ where: { id: membership.id }, data: { status: dto.status } });
       if (roles) {
         await tx.membershipRole.deleteMany({ where: { membershipId: membership.id } });
@@ -162,6 +169,42 @@ export class StaffAuthService {
 
   private membershipChoice(membership: Prisma.TenantMembershipGetPayload<{ include: typeof memberInclude }>) { const value = this.serializeMembership(membership); return { membershipId: membership.id, tenant: value.tenant, roles: value.roles }; }
   private async rolesForTenant(tenantId: string, roleIds: string[]) { const roles = await this.prisma.role.findMany({ where: { id: { in: roleIds }, tenantId, deletedAt: null }, select: { id: true } }); if (roles.length !== roleIds.length) throw new ConflictException("Mindestens eine Rolle gehört nicht zum aktuellen Mandanten."); return roles; }
+  private async assertTenantOwnerRemains(
+    tx: Prisma.TransactionClient,
+    tenantId: string,
+    membership: { id: string; status: MembershipStatus },
+    nextStatus: MembershipStatus | undefined,
+    nextRoleIds: string[] | undefined,
+  ) {
+    const ownerRole = await tx.role.findFirst({
+      where: { tenantId, name: "Tenant Owner", kind: RoleKind.SYSTEM, deletedAt: null },
+      select: { id: true },
+    });
+    if (!ownerRole || membership.status !== MembershipStatus.ACTIVE) return;
+
+    const isOwner = await tx.membershipRole.findUnique({
+      where: { membershipId_roleId: { membershipId: membership.id, roleId: ownerRole.id } },
+      select: { membershipId: true },
+    });
+    if (!isOwner) return;
+
+    const becomesInactive = nextStatus !== undefined && nextStatus !== MembershipStatus.ACTIVE;
+    const losesOwnerRole = nextRoleIds !== undefined && !nextRoleIds.includes(ownerRole.id);
+    if (!becomesInactive && !losesOwnerRole) return;
+
+    const remainingOwners = await tx.tenantMembership.count({
+      where: {
+        tenantId,
+        id: { not: membership.id },
+        status: MembershipStatus.ACTIVE,
+        deletedAt: null,
+        roleAssignments: { some: { roleId: ownerRole.id } },
+      },
+    });
+    if (!remainingOwners) {
+      throw new ConflictException("Ein Mandant muss mindestens einen aktiven Tenant Owner behalten.");
+    }
+  }
   private hashSecret(secret: string) { return createHash("sha256").update(secret).digest("hex"); }
   private hashPassword(password: string) { return argon2.hash(password, { type: argon2.argon2id, memoryCost: 19_456, timeCost: 2, parallelism: 1 }); }
   private async getDummyPasswordHash() { if (!this.dummyPasswordHash) this.dummyPasswordHash = await this.hashPassword("not-a-password"); return this.dummyPasswordHash; }

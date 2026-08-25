@@ -106,6 +106,60 @@ const standardPermissions = [
   ["settings", "update", PermissionScope.TENANT, "Einstellungen verwalten"],
 ];
 
+const systemRoles = [
+  {
+    name: "Tenant Owner",
+    description: "Vollzugriff innerhalb des Mandanten",
+    permissionKeys: null,
+  },
+  {
+    name: "Administrator",
+    description: "Operativer und administrativer Vollzugriff innerhalb des Mandanten",
+    permissionKeys: null,
+  },
+  {
+    name: "Sachbearbeitung",
+    description: "Operative Bearbeitung von Inkassoakten und Stammdaten",
+    permissionKeys: [
+      "tenant:read",
+      "case:read",
+      "case:create",
+      "case:update",
+      "case:assign",
+      "debtor:read",
+      "debtor:create",
+      "debtor:update",
+      "claim:read",
+      "claim:create",
+      "claim:update",
+      "payment:read",
+      "payment:create",
+      "payment:update",
+      "document:read",
+      "document:create",
+      "report:read",
+    ],
+  },
+  {
+    name: "Buchhaltung",
+    description: "Lesender und zahlungsbezogener Zugriff auf Inkassoakten",
+    permissionKeys: [
+      "case:read",
+      "debtor:read",
+      "claim:read",
+      "payment:read",
+      "payment:create",
+      "document:read",
+      "report:read",
+    ],
+  },
+  {
+    name: "Lesen",
+    description: "Schreibgeschützter Zugriff auf Inkassoakten und Auswertungen",
+    permissionKeys: ["case:read", "debtor:read", "claim:read", "document:read", "report:read"],
+  },
+];
+
 async function main() {
   const tenant = await prisma.tenant.upsert({
     where: { slug: "inkasso-suite" },
@@ -131,21 +185,6 @@ async function main() {
     create: { tenantId: tenant.id, userId: admin.id, status: MembershipStatus.ACTIVE },
   });
 
-  const ownerRole = await prisma.role.upsert({
-    where: { tenantId_name: { tenantId: tenant.id, name: "Tenant Owner" } },
-    update: {
-      deletedAt: null,
-      kind: RoleKind.SYSTEM,
-      description: "Vollzugriff innerhalb des Mandanten",
-    },
-    create: {
-      tenantId: tenant.id,
-      name: "Tenant Owner",
-      kind: RoleKind.SYSTEM,
-      description: "Vollzugriff innerhalb des Mandanten",
-    },
-  });
-
   const permissions = await Promise.all(
     standardPermissions.map(([resource, action, scope, description]) =>
       prisma.permission.upsert({
@@ -156,20 +195,10 @@ async function main() {
     ),
   );
 
-  await prisma.rolePermission.deleteMany({
-    where: {
-      roleId: ownerRole.id,
-      permissionId: { notIn: permissions.map((permission) => permission.id) },
-    },
-  });
-
-  await prisma.rolePermission.createMany({
-    data: permissions.map((permission) => ({
-      roleId: ownerRole.id,
-      permissionId: permission.id,
-    })),
-    skipDuplicates: true,
-  });
+  const tenants = await prisma.tenant.findMany({ where: { deletedAt: null }, select: { id: true } });
+  const rolesByTenant = new Map();
+  for (const value of tenants) rolesByTenant.set(value.id, await seedSystemRoles(value.id, permissions));
+  const ownerRole = rolesByTenant.get(tenant.id).get("Tenant Owner");
 
   await prisma.membershipRole.upsert({
     where: {
@@ -200,6 +229,37 @@ async function main() {
       documentFooter: "Lokale Entwicklungsdaten – vor produktivem Versand konfigurieren.",
     },
   });
+}
+
+async function seedSystemRoles(tenantId, permissions) {
+  const permissionsByKey = new Map(permissions.map((permission) => [`${permission.resource}:${permission.action}`, permission]));
+  const roles = new Map();
+
+  for (const definition of systemRoles) {
+    const role = await prisma.role.upsert({
+      where: { tenantId_name: { tenantId, name: definition.name } },
+      update: { deletedAt: null, kind: RoleKind.SYSTEM, description: definition.description },
+      create: { tenantId, name: definition.name, kind: RoleKind.SYSTEM, description: definition.description },
+    });
+    const assignedPermissions = definition.permissionKeys === null
+      ? permissions
+      : definition.permissionKeys.map((key) => {
+        const permission = permissionsByKey.get(key);
+        if (!permission) throw new Error(`Unbekannte Standardberechtigung: ${key}`);
+        return permission;
+      });
+
+    await prisma.rolePermission.deleteMany({
+      where: { roleId: role.id, permissionId: { notIn: assignedPermissions.map((permission) => permission.id) } },
+    });
+    await prisma.rolePermission.createMany({
+      data: assignedPermissions.map((permission) => ({ roleId: role.id, permissionId: permission.id })),
+      skipDuplicates: true,
+    });
+    roles.set(definition.name, role);
+  }
+
+  return roles;
 }
 
 async function seedDocumentTemplates(tenantId) {
