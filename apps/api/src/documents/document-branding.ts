@@ -12,7 +12,7 @@ export const documentBranding = {
 export function documentLogoPath() {
   const source = join(process.cwd(), "src", "assets", "branding", "payveo-logo-primary-flat.png");
   if (existsSync(source)) return source;
-  const workspace = join(process.cwd(), "apps", "api", "assets", "branding", "payveo-logo-primary-flat.png");
+  const workspace = join(process.cwd(), "apps", "api", "src", "assets", "branding", "payveo-logo-primary-flat.png");
   if (existsSync(workspace)) return workspace;
   return join(process.cwd(), "dist", "assets", "branding", "payveo-logo-primary-flat.png");
 }

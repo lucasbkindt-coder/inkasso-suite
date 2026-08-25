@@ -168,7 +168,7 @@ export class DocumentsService {
     ]);
     return {
       subject: this.render(template.subject ?? template.name, snapshot),
-      renderedBody: this.render(template.bodyTemplate, snapshot),
+      renderedBody: this.composeSystemBody(template.key, this.render(template.bodyTemplate, snapshot), snapshot),
       warnings: this.previewWarnings(template.key, snapshot),
       templateId: template.id,
       templateVersion: template.version,
@@ -184,16 +184,18 @@ export class DocumentsService {
     ]);
     await this.preflight(template.key, snapshot, caseData);
     const subject = this.render(template.subject ?? template.name, snapshot);
-    const renderedBody = this.render(template.bodyTemplate, snapshot);
+    const renderedBody = this.composeSystemBody(template.key, this.render(template.bodyTemplate, snapshot), snapshot);
     let activation: { portalAccountId: string; activationId: string } | undefined;
     let storageKey: string | undefined;
     let documentPersisted = false;
     try {
       const portal = await this.portalBlock(template.key, caseData.debtorPartyId, tenantId);
       if (portal?.activation) activation = portal.activation;
-      const renderSnapshot = portal
-        ? { ...snapshot, portalAccess: portal.renderBlock }
-        : snapshot;
+      const renderSnapshot = {
+        ...snapshot,
+        document: { ...(snapshot.document as Record<string, unknown>), templateKey: template.key },
+        ...(portal ? { portalAccess: portal.renderBlock } : {}),
+      };
       const persistedSnapshot = portal
         ? { ...snapshot, portalAccess: portal.snapshot }
         : snapshot;
@@ -448,6 +450,26 @@ export class DocumentsService {
       return { date: this.date(entry.bookingDate), description: entry.description, principalAmount: entry.type === "PRINCIPAL" ? remaining.toFixed(2) : "0.00", costAmount: costTypes.has(entry.type) ? remaining.toFixed(2) : "0.00", interestAmount: entry.type === "INTEREST" ? remaining.toFixed(2) : "0.00" };
     }).filter((row) => new Prisma.Decimal(row.principalAmount).plus(row.costAmount).plus(row.interestAmount).gt(0));
     const claimStatement = { asOf: new Date().toISOString(), caseId, caseNumber: data.caseNumber, currency: claim.currency, rows, principalTotal: openPrincipal, costTotal: openCosts, interestTotal: openInterest, grandTotal: new Prisma.Decimal(openPrincipal).plus(openCosts).plus(openInterest).toFixed(2) };
+    const clientAddress = `${address(data.clientParty).street} ${address(data.clientParty).houseNumber}`.trim() + `, ${address(data.clientParty).postalCode} ${address(data.clientParty).city}`;
+    const interestCalculation = data.costCalculations.find((calculation) => calculation.type === "INTEREST");
+    const interestPreview = this.record(this.record(interestCalculation?.referenceData).preview);
+    const interestPeriods = this.array(interestPreview.periods).map((period) => this.record(period));
+    const firstInterestPeriod = interestPeriods[0];
+    const interestNarrative = interestCalculation?.calculatedAmount.gt(0) && firstInterestPeriod.from && firstInterestPeriod.to && firstInterestPeriod.principalAmount && firstInterestPeriod.effectiveAnnualRate
+      ? `Auf die verzinsliche Forderung von ${this.money(firstInterestPeriod.principalAmount)} werden für den Zeitraum vom ${this.displayDate(firstInterestPeriod.from)} bis ${this.displayDate(firstInterestPeriod.to)} Verzugszinsen in Höhe von ${firstInterestPeriod.effectiveAnnualRate} % p.a. berechnet. Bis zum Berechnungsstichtag belaufen sich diese auf ${this.money(interestCalculation?.calculatedAmount)}.`
+      : "";
+    const rvgCosts = data.costCalculations.filter((calculation) => calculation.type === "RVG");
+    const rvgCostAmount = rvgCosts.reduce((sum, calculation) => sum.plus(calculation.calculatedAmount), new Prisma.Decimal(0));
+    const costNarrative = rvgCostAmount.gt(0)
+      ? `Daneben sind die aufgrund des Zahlungsverzugs entstandenen Inkassokosten in Höhe von ${this.money(rvgCostAmount)} zu erstatten. Es handelt sich um außergerichtliche Inkassokosten aus der Beauftragung mit der Forderungseinziehung.`
+      : "";
+    const legalNarrative = {
+      commission: `${data.clientParty.displayName} hat uns mit der Einziehung der gegen Sie bestehenden Forderung beauftragt.`,
+      clientAddress: data.debtorParty.type === "PERSON" && clientAddress ? `Die Anschrift des Auftraggebers lautet ${clientAddress}.` : "",
+      claim: `Die zugrunde liegende Hauptforderung beträgt ${this.money(claim.principalAmount)} und betrifft ${claim.description ?? `die Rechnung ${claim.invoiceNumber}`}. Rechnung ${claim.invoiceNumber} vom ${this.date(claim.invoiceDate)} war am ${this.date(claim.dueDate)} fällig.`,
+      interest: interestNarrative,
+      costs: costNarrative,
+    };
     return {
       case: { caseNumber: data.caseNumber, status: data.status, phase: data.phase },
       client: { displayName: data.clientParty.displayName, address: address(data.clientParty) },
@@ -492,18 +514,7 @@ export class DocumentsService {
         footer: settings.documentFooter ?? "",
       },
       document: { date: this.date(new Date()), paymentDueDate: paymentDueDate ? this.date(new Date(paymentDueDate)) : "" },
-      legalDetails: {
-        rows: data.debtorParty.type === "PERSON" ? [
-          { label: "Auftraggeber", value: data.clientParty.displayName },
-          { label: "Anschrift Auftraggeber", value: `${address(data.clientParty).street} ${address(data.clientParty).houseNumber}`.trim() + `, ${address(data.clientParty).postalCode} ${address(data.clientParty).city}` },
-          { label: "Forderungsgrund", value: claim.description ?? `Rechnung ${claim.invoiceNumber}` },
-          { label: "Rechnungsdatum", value: this.date(claim.invoiceDate) },
-          { label: "Fälligkeit", value: this.date(claim.dueDate) },
-          ...(new Prisma.Decimal(openInterest).gt(0) ? [{ label: "Zinsen bis zum Berechnungsstichtag", value: `${openInterest} EUR` }] : []),
-          ...data.costCalculations.map((calculation) => ({ label: calculation.type === "RVG" ? "Inkassokosten" : "Zinsen", value: `${calculation.calculatedAmount.toFixed(2)} EUR` })),
-          ...(settings.collectionRegistrationAuthority ? [{ label: "Zuständige Aufsichtsbehörde", value: [settings.collectionRegistrationAuthority, settings.collectionRegistrationAddress, settings.collectionRegistrationContact].filter(Boolean).join(" · ") }] : []),
-        ] : [],
-      },
+      legalDetails: legalNarrative,
       today: this.date(new Date()),
     } as Record<string, unknown>;
   }
@@ -531,6 +542,50 @@ export class DocumentsService {
         throw new BadRequestException(`Vorlagenwert ${path} ist nicht verfügbar.`);
       return String(value);
     });
+  }
+  private composeSystemBody(templateKey: string, templateBody: string, snapshot: Record<string, unknown>) {
+    if (!["payment-request", "payment-reminder", "court-dunning-notice"].includes(templateKey)) return templateBody;
+    const greeting = templateBody.split(/\n\s*\n/).map((paragraph) => paragraph.trim()).find(Boolean);
+    if (!greeting) return templateBody;
+    const legal = this.record(snapshot.legalDetails);
+    const claim = this.record(snapshot.claim);
+    const ledger = this.record(snapshot.ledger);
+    const document = this.record(snapshot.document);
+    const dueDate = String(document.paymentDueDate ?? "").trim();
+    const total = String(ledger.openTotal ?? "").trim();
+    const amount = total ? this.money(total) : "";
+    const invoiceReference = String(claim.invoiceNumber ?? "").trim();
+    const claimReference = invoiceReference ? ` zur Forderungsangelegenheit ${invoiceReference}` : "";
+    const request = (prefix: string) => {
+      const amountText = amount ? ` von ${amount}` : "";
+      const dueText = dueDate ? ` bis spätestens zum ${dueDate}` : "";
+      return `${prefix}, den nachstehend ausgewiesenen Gesamtbetrag${amountText}${dueText} auszugleichen.`;
+    };
+    if (templateKey === "payment-request") {
+      const firstParagraph = [legal.commission, legal.clientAddress, legal.claim]
+        .map((value) => String(value ?? "").trim())
+        .filter(Boolean)
+        .join(" ");
+      const secondParagraph = [legal.interest, legal.costs]
+        .map((value) => String(value ?? "").trim())
+        .filter(Boolean)
+        .join(" ");
+      return [greeting, firstParagraph, secondParagraph, request("Wir fordern Sie daher auf")]
+        .filter(Boolean)
+        .join("\n\n");
+    }
+    if (templateKey === "payment-reminder") {
+      return [
+        greeting,
+        `Mit unserem vorherigen Schreiben haben wir Sie bereits aufgefordert, die offene Forderung${claimReference} auszugleichen. Bis heute konnten wir keinen vollständigen Zahlungseingang feststellen.${amount ? ` Der derzeit offene Gesamtbetrag beläuft sich auf ${amount}.` : ""}`,
+        request("Wir fordern Sie erneut auf"),
+      ].join("\n\n");
+    }
+    return [
+      greeting,
+      `Trotz unserer bisherigen Zahlungsaufforderungen ist die offene Forderung${claimReference} weiterhin nicht vollständig ausgeglichen.${amount ? ` Der derzeit offene Gesamtbetrag beläuft sich auf ${amount}.` : ""}`,
+      `${request("Wir fordern Sie daher letztmalig auf")} Andernfalls kann die Einleitung eines gerichtlichen Mahnverfahrens geprüft werden.`,
+    ].join("\n\n");
   }
   private validateTemplate(dto: Pick<TemplateDto, "subject" | "bodyTemplate">) {
     const allowed = new Set([
@@ -584,6 +639,19 @@ export class DocumentsService {
       for (const match of value.matchAll(/{{\s*([\w.]+)\s*}}/g))
         if (!allowed.has(match[1]))
           throw new BadRequestException(`Unbekannter Platzhalter: ${match[1]}`);
+  }
+  private record(value: unknown) {
+    return typeof value === "object" && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : {};
+  }
+  private array(value: unknown) {
+    return Array.isArray(value) ? value : [];
+  }
+  private money(value: unknown) {
+    return new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR" }).format(Number(new Prisma.Decimal(String(value ?? "0")).toFixed(2)));
+  }
+  private displayDate(value: unknown) {
+    const date = new Date(String(value));
+    return Number.isNaN(date.getTime()) ? String(value) : this.date(date);
   }
   private date(value: Date) {
     return new Intl.DateTimeFormat("de-DE").format(value);
