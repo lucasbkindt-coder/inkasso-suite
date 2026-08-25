@@ -211,9 +211,6 @@ async function main() {
     create: { membershipId: membership.id, roleId: ownerRole.id },
   });
 
-  await seedPartyMasterData(tenant.id);
-  const seededCase = await seedCase(tenant.id);
-  await seedCaseTasks(tenant.id, seededCase.id);
   await seedRvgReferenceData();
   await seedDocumentTemplates(tenant.id);
   await prisma.tenantDocumentSettings.upsert({

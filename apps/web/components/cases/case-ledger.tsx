@@ -47,6 +47,13 @@ export function CaseLedger({ caseId }: { caseId: string }) {
   React.useEffect(() => {
     void load();
   }, [load]);
+  React.useEffect(() => {
+    const openPayment = (event: Event) => {
+      if ((event as CustomEvent<string>).detail === "payment") setPaymentOpen(true);
+    };
+    window.addEventListener("payveo:case-action", openPayment);
+    return () => window.removeEventListener("payveo:case-action", openPayment);
+  }, []);
   const reverse = async (entry: LedgerEntry) => {
     if (!window.confirm(`Buchung „${entry.description}“ stornieren?`)) return;
     try {
@@ -57,7 +64,7 @@ export function CaseLedger({ caseId }: { caseId: string }) {
     }
   };
   return (
-    <section className="rounded-2xl border bg-card p-6 shadow-sm">
+    <section className="rounded-2xl border bg-card p-6 shadow-sm" id="ledger">
       <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
         <div>
           <h2 className="text-xl font-semibold">Forderungskonto</h2>

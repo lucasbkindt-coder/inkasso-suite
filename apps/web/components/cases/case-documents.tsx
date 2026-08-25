@@ -77,6 +77,13 @@ export function CaseDocuments({ caseId, debtorType, caseStatus }: { caseId: stri
   React.useEffect(() => {
     void load();
   }, [load]);
+  React.useEffect(() => {
+    const openDocument = (event: Event) => {
+      if ((event as CustomEvent<string>).detail === "document") setOpen(true);
+    };
+    window.addEventListener("payveo:case-action", openDocument);
+    return () => window.removeEventListener("payveo:case-action", openDocument);
+  }, []);
 
   const voidDocument = async (document: CaseDocument) => {
     if (!window.confirm(`Dokument „${document.filename}“ wirklich ungültig machen?`)) return;
@@ -93,7 +100,7 @@ export function CaseDocuments({ caseId, debtorType, caseStatus }: { caseId: stri
   };
 
   return (
-    <section className="rounded-2xl border bg-card p-6 shadow-sm">
+    <section className="rounded-2xl border bg-card p-6 shadow-sm" id="documents">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex items-center gap-3">
           <div className="rounded-lg bg-primary/10 p-3 text-primary">

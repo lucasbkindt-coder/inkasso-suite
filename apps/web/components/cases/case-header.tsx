@@ -38,6 +38,15 @@ export function CaseHeader({ caseRecord, onChanged }: { caseRecord: Case; onChan
         </div>
         <div className="flex flex-wrap gap-2">
           <PortalPreviewButton id={caseRecord.id} kind="debtor-case" label="Schuldnerportal öffnen" />
+          <Link className="rounded-lg border px-3 py-2 text-sm font-medium hover:bg-muted" href={`/parteien/${caseRecord.debtorParty.id}`}>
+            Schuldner öffnen
+          </Link>
+          <Link className="rounded-lg border px-3 py-2 text-sm font-medium hover:bg-muted" href={`/parteien/${caseRecord.clientParty.id}`}>
+            Mandant öffnen
+          </Link>
+          <CaseActionButton action="document" label="Dokument erstellen" />
+          <CaseActionButton action="payment" label="Zahlung erfassen" />
+          <CaseActionButton action="task" label="Aufgabe anlegen" />
           <CaseStatusControl caseRecord={caseRecord} onChanged={onChanged} />
           <Badge className={statusBadgeClasses[caseRecord.status]}>
             {caseStatusLabels[caseRecord.status]}
@@ -74,6 +83,10 @@ export function CaseHeader({ caseRecord, onChanged }: { caseRecord: Case; onChan
       </div>
     </section>
   );
+}
+
+function CaseActionButton({ action, label }: { action: "document" | "payment" | "task"; label: string }) {
+  return <button className="rounded-lg border px-3 py-2 text-sm font-medium hover:bg-muted" onClick={() => window.dispatchEvent(new CustomEvent("payveo:case-action", { detail: action }))} type="button">{label}</button>;
 }
 
 function Metric({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {

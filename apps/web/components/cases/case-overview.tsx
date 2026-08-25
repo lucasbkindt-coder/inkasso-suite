@@ -9,8 +9,9 @@ export function CaseOverview({ caseRecord }: { caseRecord: Case }) {
   return (
     <section className="rounded-2xl border bg-card p-6 shadow-sm">
       <h2 className="mb-6 text-xl font-semibold">Aktenübersicht</h2>
-      <div className="grid gap-8 lg:grid-cols-2">
+      <div className="grid gap-8 xl:grid-cols-3">
         <PartySection party={caseRecord.debtorParty} title="Schuldner" />
+        <PartySection party={caseRecord.clientParty} title="Mandant" />
         <div>
           <h3 className="mb-4 font-semibold">Forderung</h3>
           <div className="space-y-3">
