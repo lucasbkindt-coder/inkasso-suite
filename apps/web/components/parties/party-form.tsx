@@ -5,7 +5,7 @@ import * as React from "react";
 import { useFieldArray, useForm } from "react-hook-form";
 import { z } from "zod";
 import { Button } from "@/components/ui/button";
-import { type PartyDetail, type PartyInput, partyApi } from "./party-api";
+import { type PartyDetail, type PartyInput, type PartyRole, partyApi } from "./party-api";
 
 const roles = ["CLIENT", "DEBTOR", "CONTACT", "OTHER"] as const;
 const schema = z
@@ -71,13 +71,15 @@ const empty: Values = {
   addressLine2: "",
   postalCode: "",
   city: "",
-  contacts: [{ type: "EMAIL", value: "", label: "", isPrimary: true }],
+  contacts: [],
 };
 export function PartyForm({
   party,
+  initialRoles = ["DEBTOR"],
   onSaved,
 }: {
   party?: PartyDetail;
+  initialRoles?: PartyRole[];
   onSaved: (party: PartyDetail) => void;
 }) {
   const form = useForm<Values>({
@@ -93,7 +95,7 @@ export function PartyForm({
           city: party.addresses[0]?.city || "",
           contacts: party.contacts.length ? party.contacts : empty.contacts,
         }
-      : empty,
+      : { ...empty, roles: initialRoles },
   });
   const contacts = useFieldArray({ control: form.control, name: "contacts" });
   const type = form.watch("type");

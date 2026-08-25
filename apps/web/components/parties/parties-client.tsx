@@ -6,7 +6,7 @@ import { Plus, Search, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PartyDialog } from "./party-dialog";
 
-const API = process.env.NEXT_PUBLIC_API_URL ?? "/api";
+const API = "/api";
 type Party = {
   id: string;
   type: "PERSON" | "COMPANY";
@@ -17,11 +17,21 @@ type Party = {
   contacts: { value: string; isPrimary: boolean }[];
 };
 type Result = { items: Party[]; meta: { total: number } };
-export function PartiesClient() {
+export function PartiesClient({
+  role,
+  title = "Parteien",
+  description = "Auftraggeber, Schuldner und weitere Stammdaten verwalten.",
+  createLabel = "Neue Partei",
+}: {
+  role?: "CLIENT" | "DEBTOR";
+  title?: string;
+  description?: string;
+  createLabel?: string;
+}) {
   const router = useRouter();
   const [data, setData] = React.useState<Result>({ items: [], meta: { total: 0 } });
   const [search, setSearch] = React.useState("");
-  const [filter, setFilter] = React.useState("");
+  const [filter, setFilter] = React.useState<string>(role ?? "");
   const [error, setError] = React.useState("");
   const [dialogOpen, setDialogOpen] = React.useState(false);
   const load = React.useCallback(async () => {
@@ -30,7 +40,7 @@ export function PartiesClient() {
       if (search) params.set("search", search);
       if (filter === "PERSON" || filter === "COMPANY") params.set("type", filter);
       if (["CLIENT", "DEBTOR"].includes(filter)) params.set("role", filter);
-      const response = await fetch(`${API}/parties?${params}`, { cache: "no-store" });
+      const response = await fetch(`${API}/parties?${params}`, { cache: "no-store", credentials: "include" });
       if (!response.ok) throw new Error("Parteien konnten nicht geladen werden.");
       setData(await response.json());
       setError("");
@@ -38,12 +48,13 @@ export function PartiesClient() {
       setError(cause instanceof Error ? cause.message : "Unbekannter Fehler");
     }
   }, [filter, search]);
+  React.useEffect(() => setFilter(role ?? ""), [role]);
   React.useEffect(() => {
     void load();
   }, [load]);
   const remove = async (party: Party) => {
     if (!window.confirm(`„${party.displayName}“ löschen?`)) return;
-    const response = await fetch(`${API}/parties/${party.id}`, { method: "DELETE" });
+    const response = await fetch(`${API}/parties/${party.id}`, { method: "DELETE", credentials: "include" });
     if (response.ok) void load();
     else setError("Partei konnte nicht gelöscht werden.");
   };
@@ -52,17 +63,18 @@ export function PartiesClient() {
       <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
         <div>
           <p className="text-sm font-medium text-primary">payveo · Arbeitsbereich</p>
-          <h2 className="mt-1 text-2xl font-semibold tracking-tight sm:text-3xl">Parteien</h2>
+          <h2 className="mt-1 text-2xl font-semibold tracking-tight sm:text-3xl">{title}</h2>
           <p className="mt-2 text-sm text-muted-foreground">
-            Auftraggeber, Schuldner und weitere Stammdaten verwalten.
+            {description}
           </p>
         </div>
         <Button onClick={() => setDialogOpen(true)}>
-          <Plus className="size-4" /> Neue Partei
+          <Plus className="size-4" /> {createLabel}
         </Button>
       </div>
       <PartyDialog
         onOpenChange={setDialogOpen}
+        initialRoles={role ? [role] : undefined}
         onSaved={(party) => router.push(`/parteien/${party.id}`)}
         open={dialogOpen}
       />
@@ -77,7 +89,7 @@ export function PartiesClient() {
               value={search}
             />
           </div>
-          <div className="flex flex-wrap gap-2">
+          {!role ? <div className="flex flex-wrap gap-2">
             {[
               ["", "Alle"],
               ["CLIENT", "Auftraggeber"],
@@ -93,7 +105,7 @@ export function PartiesClient() {
                 {label}
               </Button>
             ))}
-          </div>
+          </div> : null}
         </div>
         {error ? (
           <p className="p-4 text-sm text-destructive">{error}</p>

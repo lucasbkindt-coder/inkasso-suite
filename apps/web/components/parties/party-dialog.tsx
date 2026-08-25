@@ -2,17 +2,21 @@
 import * as Dialog from "@radix-ui/react-dialog";
 import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { type PartyDetail } from "./party-api";
+import { type PartyDetail, type PartyRole } from "./party-api";
 import { PartyForm } from "./party-form";
 export function PartyDialog({
   open,
   onOpenChange,
   party,
+  initialRoles,
+  title,
   onSaved,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   party?: PartyDetail;
+  initialRoles?: PartyRole[];
+  title?: string;
   onSaved: (party: PartyDetail) => void;
 }) {
   return (
@@ -23,7 +27,7 @@ export function PartyDialog({
           <div className="mb-5 flex justify-between">
             <div>
               <Dialog.Title className="text-lg font-semibold">
-                {party ? "Partei bearbeiten" : "Neue Partei"}
+                {party ? "Partei bearbeiten" : title ?? "Neue Partei"}
               </Dialog.Title>
               <Dialog.Description className="text-sm text-muted-foreground">
                 Stammdaten im Arbeitsbereich pflegen.
@@ -41,6 +45,7 @@ export function PartyDialog({
               onSaved(result);
             }}
             party={party}
+            initialRoles={initialRoles}
           />
         </Dialog.Content>
       </Dialog.Portal>

@@ -1,5 +1,5 @@
-import { DebtorsClient } from "@/components/debtors/debtors-client";
+import { PartiesClient } from "@/components/parties/parties-client";
 
 export default function DebtorsPage() {
-  return <DebtorsClient />;
+  return <PartiesClient createLabel="Schuldner anlegen" description="Schuldner-Stammdaten im Arbeitsbereich verwalten." role="DEBTOR" title="Schuldner" />;
 }

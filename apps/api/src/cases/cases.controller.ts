@@ -16,6 +16,7 @@ import { CreateCaseDto } from "./dto/create-case.dto";
 import { QueryCasesDto } from "./dto/query-cases.dto";
 import { UpdateCaseDto } from "./dto/update-case.dto";
 import { AssignCaseDto } from "./dto/assign-case.dto";
+import { TransitionCaseStatusDto } from "./dto/transition-case-status.dto";
 
 @Controller("cases")
 export class CasesController {
@@ -36,6 +37,11 @@ export class CasesController {
     return this.casesService.findOne(id);
   }
 
+  @Get(":id/status-transitions")
+  statusTransitions(@Param("id", ParseUUIDPipe) id: string) {
+    return this.casesService.availableStatusTransitions(id);
+  }
+
   @Post()
   create(@Body() dto: CreateCaseDto) {
     return this.casesService.create(dto);
@@ -49,6 +55,11 @@ export class CasesController {
   @Post(":id/assignee")
   assign(@Param("id", ParseUUIDPipe) id: string, @Body() dto: AssignCaseDto) {
     return this.casesService.assign(id, dto.membershipId ?? null);
+  }
+
+  @Post(":id/status-transition")
+  transitionStatus(@Param("id", ParseUUIDPipe) id: string, @Body() dto: TransitionCaseStatusDto) {
+    return this.casesService.transitionStatus(id, dto.targetStatus);
   }
 
   @Delete(":id")

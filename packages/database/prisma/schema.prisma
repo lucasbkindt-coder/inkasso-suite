@@ -535,6 +535,9 @@ model TenantDocumentSettings {
   bic                String?
   bankName           String?
   creditorId         String?
+  collectionRegistrationAuthority String?
+  collectionRegistrationAddress   String?
+  collectionRegistrationContact   String?
   documentFooter     String?
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt

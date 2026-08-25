@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from "@nestjs/common";
 import {
   MembershipStatus,
   LedgerEntrySide,
@@ -207,7 +207,6 @@ export class CasesService {
       await tx.case.update({
         where: { id },
         data: {
-          status: dto.status,
           phase: dto.phase,
           priority: dto.priority,
           ownerMembershipId: dto.ownerMembershipId,
@@ -245,6 +244,24 @@ export class CasesService {
     return this.getCase(id, tenantId, true);
   }
 
+  async availableStatusTransitions(id: string) {
+    const tenantId = await this.tenantContext.getTenantId();
+    this.staffAuth.requirePermission(this.tenantContext.getStaffContext(), "case:read");
+    const caseRecord = await this.getCase(id, tenantId, true);
+    return { currentStatus: caseRecord.status, allowedTargetStatuses: this.allowedStatusTransitions(caseRecord.status) };
+  }
+
+  async transitionStatus(id: string, targetStatus: CaseStatus) {
+    const tenantId = await this.tenantContext.getTenantId();
+    this.staffAuth.requirePermission(this.tenantContext.getStaffContext(), "case:update");
+    const caseRecord = await this.getCase(id, tenantId, true);
+    if (!this.allowedStatusTransitions(caseRecord.status).includes(targetStatus)) {
+      throw new ConflictException(`Der Status ${targetStatus} ist aus ${caseRecord.status} nicht zulässig.`);
+    }
+    await this.prisma.case.update({ where: { id }, data: { status: targetStatus, closedAt: targetStatus === "CLOSED" ? new Date() : null } });
+    return this.getCase(id, tenantId, true);
+  }
+
   private async assertPartyRole(
     partyId: string,
     tenantId: string,
@@ -257,6 +274,15 @@ export class CasesService {
     });
     if (!party)
       throw new BadRequestException(`${label} muss eine aktive Partei dieses Mandanten sein.`);
+  }
+
+  private allowedStatusTransitions(status: CaseStatus): CaseStatus[] {
+    const transitions: Record<CaseStatus, CaseStatus[]> = {
+      OPEN: ["CLOSED", "CANCELLED"],
+      CLOSED: ["OPEN"],
+      CANCELLED: ["OPEN"],
+    };
+    return transitions[status];
   }
 
   private async assertOwner(membershipId: string, tenantId: string) {

@@ -1,6 +1,7 @@
 import { ArrowLeft, Building2, CalendarDays, CircleDollarSign, User } from "lucide-react";
 import Link from "next/link";
 import { PortalPreviewButton } from "@/components/portal/portal-preview-button";
+import { CaseStatusControl } from "./case-status-control";
 
 import type { Case } from "@/types/case";
 
@@ -14,7 +15,7 @@ import {
   statusBadgeClasses,
 } from "./case-ui";
 
-export function CaseHeader({ caseRecord }: { caseRecord: Case }) {
+export function CaseHeader({ caseRecord, onChanged }: { caseRecord: Case; onChanged: (caseRecord: Case) => void }) {
   const owner =
     caseRecord.assignedMembership?.user.displayName ??
     caseRecord.assignedMembership?.user.email ??
@@ -37,6 +38,7 @@ export function CaseHeader({ caseRecord }: { caseRecord: Case }) {
         </div>
         <div className="flex flex-wrap gap-2">
           <PortalPreviewButton id={caseRecord.id} kind="debtor-case" label="Schuldnerportal öffnen" />
+          <CaseStatusControl caseRecord={caseRecord} onChanged={onChanged} />
           <Badge className={statusBadgeClasses[caseRecord.status]}>
             {caseStatusLabels[caseRecord.status]}
           </Badge>

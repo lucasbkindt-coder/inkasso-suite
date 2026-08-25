@@ -33,6 +33,9 @@ const fields: { key: keyof TenantDocumentSettingsInput; label: string; type?: st
   { key: "bic", label: "BIC" },
   { key: "bankName", label: "Bankname" },
   { key: "creditorId", label: "Gläubiger-ID" },
+  { key: "collectionRegistrationAuthority", label: "Zuständige Aufsichtsbehörde" },
+  { key: "collectionRegistrationAddress", label: "Anschrift Aufsichtsbehörde" },
+  { key: "collectionRegistrationContact", label: "Elektronische Erreichbarkeit Aufsicht", type: "url" },
 ];
 
 function toInput(value: Awaited<ReturnType<typeof caseApi.getTenantDocumentSettings>>) {
@@ -58,6 +61,9 @@ function toInput(value: Awaited<ReturnType<typeof caseApi.getTenantDocumentSetti
     bic: value.bic ?? undefined,
     bankName: value.bankName ?? undefined,
     creditorId: value.creditorId ?? undefined,
+    collectionRegistrationAuthority: value.collectionRegistrationAuthority ?? undefined,
+    collectionRegistrationAddress: value.collectionRegistrationAddress ?? undefined,
+    collectionRegistrationContact: value.collectionRegistrationContact ?? undefined,
     documentFooter: value.documentFooter ?? undefined,
   };
 }

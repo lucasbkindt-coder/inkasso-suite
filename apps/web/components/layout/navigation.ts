@@ -4,7 +4,6 @@ import {
   LayoutDashboard,
   ListTodo,
   Settings,
-  ShieldCheck,
   Users,
   UsersRound,
 } from "lucide-react";
@@ -35,8 +34,6 @@ export const navigationGroups = [
     items: [
       { href: "/mandanten", label: "Mandanten", icon: Building2 },
       { href: "/benutzer", label: "Benutzer", icon: UsersRound },
-      { href: "/teams", label: "Teams", icon: UsersRound },
-      { href: "/rollen", label: "Rollen", icon: ShieldCheck },
       { href: "/einstellungen", label: "Einstellungen", icon: Settings },
     ],
   },
@@ -54,8 +51,6 @@ export const pageTitles: Record<string, string> = {
   "/zahlungen": "Zahlungen",
   "/dokumente": "Dokumente",
   "/benutzer": "Benutzer",
-  "/teams": "Teams",
-  "/rollen": "Rollen",
   "/einstellungen": "Einstellungen",
 };
 

@@ -1,5 +1,6 @@
-import { IsOptional, IsString, IsUUID } from "class-validator";
+import { IsDateString, IsOptional, IsString, IsUUID } from "class-validator";
 export class DocumentRenderDto {
   @IsOptional() @IsUUID() templateId?: string;
   @IsOptional() @IsString() templateKey?: string;
+  @IsOptional() @IsDateString() paymentDueDate?: string;
 }

@@ -9,7 +9,10 @@ export type PortalPreview = { tenantId: string; portalType: PortalType; partyId:
 
 @Injectable()
 export class PortalPreviewService {
-  private readonly tokens = new Map<string, PortalPreview>();
+  // The preview controller and portal access service can be resolved through
+  // separate Nest module paths. Preview state must therefore be shared across
+  // service instances within the running API process.
+  private static readonly tokens = new Map<string, PortalPreview>();
   constructor(private readonly prisma: PrismaService, private readonly tenant: TenantContextService) {}
 
   async createClient(partyId: string) { return this.createPartyPreview("CLIENT", partyId); }
@@ -21,17 +24,17 @@ export class PortalPreviewService {
     return this.issue({ tenantId, portalType: "DEBTOR", partyId: caseRecord.debtorPartyId, caseId, returnUrl: `/akten/${caseId}` });
   }
   async require(token: string | undefined, expected: PortalType) {
-    const preview = token ? this.tokens.get(token) : undefined;
+    const preview = token ? PortalPreviewService.tokens.get(token) : undefined;
     if (!preview || preview.expiresAt <= new Date() || preview.portalType !== expected) {
-      if (preview && preview.expiresAt <= new Date() && token) this.tokens.delete(token);
+      if (preview && preview.expiresAt <= new Date() && token) PortalPreviewService.tokens.delete(token);
       throw new UnauthorizedException("Ungültiger oder abgelaufener Portalvorschauzugriff.");
     }
     return preview;
   }
   async context(token: string | undefined) {
-    const preview = token ? this.tokens.get(token) : undefined;
+    const preview = token ? PortalPreviewService.tokens.get(token) : undefined;
     if (!preview || preview.expiresAt <= new Date()) {
-      if (token) this.tokens.delete(token);
+      if (token) PortalPreviewService.tokens.delete(token);
       throw new UnauthorizedException("Ungültiger oder abgelaufener Portalvorschauzugriff.");
     }
     return { portalType: preview.portalType, returnUrl: preview.returnUrl, expiresAt: preview.expiresAt.toISOString() };
@@ -47,7 +50,7 @@ export class PortalPreviewService {
       throw new UnauthorizedException("Ungültiger interner Rücksprungpfad.");
     const token = randomBytes(32).toString("base64url");
     const expiresAt = new Date(Date.now() + 15 * 60_000);
-    this.tokens.set(token, { ...context, expiresAt });
+    PortalPreviewService.tokens.set(token, { ...context, expiresAt });
     const base = context.portalType === "CLIENT" ? "/portal/mandant" : "/portal/schuldner";
     return { previewUrl: `${base}?preview=${encodeURIComponent(token)}`, expiresAt: expiresAt.toISOString() };
   }

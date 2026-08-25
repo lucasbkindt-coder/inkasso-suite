@@ -257,6 +257,9 @@ export type TenantDocumentSettings = {
   bic: string | null;
   bankName: string | null;
   creditorId: string | null;
+  collectionRegistrationAuthority: string | null;
+  collectionRegistrationAddress: string | null;
+  collectionRegistrationContact: string | null;
   documentFooter: string | null;
   createdAt: string;
   updatedAt: string;
@@ -282,6 +285,9 @@ export type TenantDocumentSettingsInput = {
   bic?: string;
   bankName?: string;
   creditorId?: string;
+  collectionRegistrationAuthority?: string;
+  collectionRegistrationAddress?: string;
+  collectionRegistrationContact?: string;
   documentFooter?: string;
 };
 export type CaseDocument = {

@@ -178,11 +178,13 @@ function DocumentGenerateDialog({
   const [loadingPreview, setLoadingPreview] = React.useState(false);
   const [generating, setGenerating] = React.useState(false);
   const [error, setError] = React.useState("");
+  const [paymentDueDate, setPaymentDueDate] = React.useState("");
   React.useEffect(() => {
     if (open) {
       setTemplateId(templates[0]?.id ?? "");
       setPreview(null);
       setError("");
+      setPaymentDueDate("");
     }
   }, [open, templates]);
   const selected = templates.find((template) => template.id === templateId);
@@ -191,7 +193,7 @@ function DocumentGenerateDialog({
     setLoadingPreview(true);
     setError("");
     try {
-      setPreview(await caseApi.previewDocument(caseId, templateId));
+      setPreview(await caseApi.previewDocument(caseId, templateId, paymentDueDate));
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Vorschau konnte nicht erstellt werden.");
     } finally {
@@ -203,7 +205,7 @@ function DocumentGenerateDialog({
     setGenerating(true);
     setError("");
     try {
-      await caseApi.generateDocument(caseId, templateId);
+      await caseApi.generateDocument(caseId, templateId, paymentDueDate);
       onCreated();
       onOpenChange(false);
     } catch (cause) {
@@ -254,6 +256,19 @@ function DocumentGenerateDialog({
                   ))}
                 </select>
               </label>
+              {selected?.key === "payment-request" || selected?.key === "payment-reminder" || selected?.key === "court-dunning-notice" || selected?.key === "enforcement-notice" ? (
+                <label className="mt-4 grid gap-1 text-sm font-medium">
+                  Zahlungsfrist
+                  <input
+                    className="h-10 rounded-lg border bg-background px-3 font-normal"
+                    disabled={loadingPreview || generating}
+                    min={new Date().toISOString().slice(0, 10)}
+                    onChange={(event) => { setPaymentDueDate(event.target.value); setPreview(null); }}
+                    type="date"
+                    value={paymentDueDate}
+                  />
+                </label>
+              ) : null}
               <div className="mt-4 flex justify-end">
                 <Button
                   disabled={!templateId || loadingPreview || generating}

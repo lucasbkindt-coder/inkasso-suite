@@ -181,6 +181,10 @@ export const caseApi = {
   restoreCase: (id: string) => request<Case>(`/cases/${id}/restore`, { method: "POST" }),
   assignCase: (id: string, membershipId: string | null) =>
     request<Case>(`/cases/${id}/assignee`, { method: "POST", body: JSON.stringify({ membershipId }) }),
+  getCaseStatusTransitions: (id: string) =>
+    request<{ currentStatus: Case["status"]; allowedTargetStatuses: Case["status"][] }>(`/cases/${id}/status-transitions`),
+  transitionCaseStatus: (id: string, targetStatus: Case["status"]) =>
+    request<Case>(`/cases/${id}/status-transition`, { method: "POST", body: JSON.stringify({ targetStatus }) }),
   getStaffMembers: () => request<{ membershipId: string; displayName: string; email: string; roles: string[] }[]>("/staff/members"),
   getTasks: (query: TasksQuery = {}) => {
     const suffix = queryString(query);
@@ -223,15 +227,15 @@ export const caseApi = {
       body: JSON.stringify(payload),
     }),
   getDocuments: (caseId: string) => request<CaseDocument[]>(`/cases/${caseId}/documents`),
-  previewDocument: (caseId: string, templateId: string) =>
+  previewDocument: (caseId: string, templateId: string, paymentDueDate?: string) =>
     request<DocumentPreview>(`/cases/${caseId}/documents/preview`, {
       method: "POST",
-      body: JSON.stringify({ templateId }),
+      body: JSON.stringify({ templateId, paymentDueDate: paymentDueDate || undefined }),
     }),
-  generateDocument: (caseId: string, templateId: string) =>
+  generateDocument: (caseId: string, templateId: string, paymentDueDate?: string) =>
     request<CaseDocument>(`/cases/${caseId}/documents/generate`, {
       method: "POST",
-      body: JSON.stringify({ templateId }),
+      body: JSON.stringify({ templateId, paymentDueDate: paymentDueDate || undefined }),
     }),
   voidDocument: (caseId: string, id: string) =>
     request<CaseDocument>(`/cases/${caseId}/documents/${id}/void`, { method: "POST" }),

@@ -12,6 +12,20 @@ import { renderDin5008Document } from "./din5008-layout";
 import { MailService } from "./mail.service";
 
 const INITIAL_DEBTOR_PORTAL_TEMPLATE_KEYS = new Set(["payment-request"]);
+type SystemTemplateRule = {
+  filename: string;
+  requiresOpenBalance: boolean;
+  requiresPaymentDueDate: boolean;
+  requiresPreviousTemplate?: string;
+  requiresEnforceableTitle?: boolean;
+};
+
+const SYSTEM_TEMPLATE_RULES: Record<string, SystemTemplateRule> = {
+  "payment-request": { filename: "zahlungsaufforderung", requiresOpenBalance: true, requiresPaymentDueDate: true },
+  "payment-reminder": { filename: "zweite-zahlungsaufforderung", requiresOpenBalance: true, requiresPaymentDueDate: true, requiresPreviousTemplate: "payment-request" },
+  "court-dunning-notice": { filename: "ankuendigung-mahnverfahren", requiresOpenBalance: true, requiresPaymentDueDate: true },
+  "enforcement-notice": { filename: "vollstreckungsankuendigung", requiresOpenBalance: true, requiresPaymentDueDate: true, requiresEnforceableTitle: true },
+} as const;
 
 type PortalRenderBlock =
   | {
@@ -150,12 +164,12 @@ export class DocumentsService {
     const tenantId = await this.tenant.getTenantId();
     const [template, snapshot] = await Promise.all([
       this.template(dto, tenantId),
-      this.snapshot(caseId, tenantId),
+      this.snapshot(caseId, tenantId, dto.paymentDueDate),
     ]);
     return {
       subject: this.render(template.subject ?? template.name, snapshot),
       renderedBody: this.render(template.bodyTemplate, snapshot),
-      warnings: [],
+      warnings: this.previewWarnings(template.key, snapshot),
       templateId: template.id,
       templateVersion: template.version,
       dataSnapshot: snapshot,
@@ -165,16 +179,12 @@ export class DocumentsService {
     const tenantId = await this.tenant.getTenantId();
     const [template, snapshot, caseData] = await Promise.all([
       this.template(dto, tenantId),
-      this.snapshot(caseId, tenantId),
+      this.snapshot(caseId, tenantId, dto.paymentDueDate),
       this.caseData(caseId, tenantId),
     ]);
+    await this.preflight(template.key, snapshot, caseData);
     const subject = this.render(template.subject ?? template.name, snapshot);
     const renderedBody = this.render(template.bodyTemplate, snapshot);
-    if (template.key === "payment-request") {
-      const statement = snapshot.claimStatement as { rows: unknown[]; grandTotal: string };
-      if (!statement.rows.length || new Prisma.Decimal(statement.grandTotal).lte(0))
-        throw new BadRequestException("Ein Forderungsschreiben benötigt eine offene Forderungsposition.");
-    }
     let activation: { portalAccountId: string; activationId: string } | undefined;
     let storageKey: string | undefined;
     let documentPersisted = false;
@@ -190,7 +200,8 @@ export class DocumentsService {
       const pdf = await renderDin5008Document(subject, renderedBody, renderSnapshot);
       const documentStorageKey = await this.storage.save(pdf);
       storageKey = documentStorageKey;
-      const filename = `payveo-${String((snapshot as { case: { caseNumber: string } }).case.caseNumber).replace(/\//g, "-")}-${Date.now()}.pdf`;
+      const rule = SYSTEM_TEMPLATE_RULES[template.key as keyof typeof SYSTEM_TEMPLATE_RULES];
+      const filename = `payveo_${String((snapshot as { case: { caseNumber: string } }).case.caseNumber).replace(/\//g, "-")}_${rule?.filename ?? "dokument"}.pdf`;
       const document = await this.prisma.$transaction(async (tx) => {
         const document = await tx.caseDocument.create({
           data: {
@@ -281,6 +292,44 @@ export class DocumentsService {
     };
   }
 
+  private async preflight(
+    templateKey: string,
+    snapshot: Record<string, unknown>,
+    caseData: { id: string; tenantId: string; status: string; phase: string; debtorParty: { type: string }; claim: { status: string } | null },
+  ) {
+    const rule = SYSTEM_TEMPLATE_RULES[templateKey as keyof typeof SYSTEM_TEMPLATE_RULES];
+    if (!rule) return;
+    const statement = snapshot.claimStatement as { rows: unknown[]; grandTotal: string };
+    if (rule.requiresOpenBalance && (!statement.rows.length || new Prisma.Decimal(statement.grandTotal).lte(0))) throw new BadRequestException("Dieses Schreiben benötigt eine offene Forderungsposition.");
+    const company = snapshot.company as Record<string, unknown>;
+    const dueDate = (snapshot.document as Record<string, unknown>).paymentDueDate;
+    if (rule.requiresPaymentDueDate && !dueDate) throw new BadRequestException("Für dieses Schreiben muss eine konkrete Zahlungsfrist angegeben werden.");
+    if (dueDate && new Date(String(dueDate).split(".").reverse().join("-")).getTime() <= Date.now()) throw new BadRequestException("Die Zahlungsfrist muss in der Zukunft liegen.");
+    if (templateKey === "payment-request" && caseData.debtorParty.type === "PERSON") {
+      const required = ["companyName", "street", "postalCode", "city", "iban", "collectionRegistrationAuthority", "collectionRegistrationAddress", "collectionRegistrationContact"] as const;
+      const missing = required.find((key) => !company[key]);
+      if (missing) throw new BadRequestException(this.missingPaymentRequestSettingMessage(missing));
+    }
+    if (rule.requiresPreviousTemplate) {
+      const previous = await this.prisma.caseDocument.findFirst({ where: { caseId: caseData.id, tenantId: caseData.tenantId, status: { not: DocumentStatus.VOIDED }, template: { key: rule.requiresPreviousTemplate } }, select: { id: true } });
+      if (!previous) throw new BadRequestException("Eine zweite Zahlungsaufforderung setzt eine vorherige Zahlungsaufforderung voraus.");
+    }
+    if (templateKey === "court-dunning-notice" && (caseData.status !== "OPEN" || !["OUT_OF_COURT", "JUDICIAL_DUNNING"].includes(caseData.phase) || caseData.claim?.status === "DISPUTED")) throw new BadRequestException("Die Ankündigung eines gerichtlichen Mahnverfahrens ist für den aktuellen Aktenstatus nicht zulässig.");
+    if (rule.requiresEnforceableTitle) throw new BadRequestException("Eine Vollstreckungsankündigung ist ohne dokumentierte Vollstreckungsgrundlage nicht generierbar.");
+  }
+
+  private missingPaymentRequestSettingMessage(field: string) {
+    const labels: Record<string, string> = { companyName: "Firmenname", street: "Straße", postalCode: "PLZ", city: "Ort", iban: "IBAN", collectionRegistrationAuthority: "Zuständige Aufsichtsbehörde", collectionRegistrationAddress: "Anschrift der Aufsichtsbehörde", collectionRegistrationContact: "Elektronische Erreichbarkeit der Aufsichtsbehörde" };
+    return `${labels[field] ?? field} ist in den Unternehmenseinstellungen nicht hinterlegt.`;
+  }
+
+  private previewWarnings(templateKey: string, snapshot: Record<string, unknown>) {
+    if (templateKey !== "payment-request" || (snapshot.debtor as Record<string, unknown>).type !== "PERSON") return [];
+    const company = snapshot.company as Record<string, unknown>;
+    const required = ["companyName", "street", "postalCode", "city", "iban", "collectionRegistrationAuthority", "collectionRegistrationAddress", "collectionRegistrationContact"];
+    return required.filter((field) => !company[field]).map((field) => this.missingPaymentRequestSettingMessage(field));
+  }
+
   private portalActivationBaseUrl() {
     const configured = process.env.PORTAL_PUBLIC_BASE_URL?.trim();
     if (!configured) {
@@ -346,15 +395,16 @@ export class DocumentsService {
       where: { id: caseId, tenantId, deletedAt: null },
       include: {
         claim: true,
+        costCalculations: { where: { status: "APPLIED" }, orderBy: { appliedAt: "desc" } },
         clientParty: { include: { addresses: { where: { deletedAt: null, isPrimary: true } } } },
-        debtorParty: { include: { addresses: { where: { deletedAt: null, isPrimary: true } }, contacts: { where: { deletedAt: null, type: "EMAIL" }, orderBy: [{ isPrimary: "desc" }, { createdAt: "asc" }] } } },
+        debtorParty: { include: { person: true, addresses: { where: { deletedAt: null, isPrimary: true } }, contacts: { where: { deletedAt: null, type: "EMAIL" }, orderBy: [{ isPrimary: "desc" }, { createdAt: "asc" }] } } },
       },
     });
     if (!value || !value.claim)
       throw new NotFoundException("Akte oder Forderung wurde nicht gefunden.");
     return value;
   }
-  private async snapshot(caseId: string, tenantId: string) {
+  private async snapshot(caseId: string, tenantId: string, paymentDueDate?: string) {
     const [data, settings] = await Promise.all([
       this.caseData(caseId, tenantId),
       this.prisma.tenantDocumentSettings.findUnique({ where: { tenantId } }),
@@ -399,9 +449,9 @@ export class DocumentsService {
     }).filter((row) => new Prisma.Decimal(row.principalAmount).plus(row.costAmount).plus(row.interestAmount).gt(0));
     const claimStatement = { asOf: new Date().toISOString(), caseId, caseNumber: data.caseNumber, currency: claim.currency, rows, principalTotal: openPrincipal, costTotal: openCosts, interestTotal: openInterest, grandTotal: new Prisma.Decimal(openPrincipal).plus(openCosts).plus(openInterest).toFixed(2) };
     return {
-      case: { caseNumber: data.caseNumber },
+      case: { caseNumber: data.caseNumber, status: data.status, phase: data.phase },
       client: { displayName: data.clientParty.displayName, address: address(data.clientParty) },
-      debtor: { displayName: data.debtorParty.displayName, address: debtorAddress },
+      debtor: { type: data.debtorParty.type, displayName: data.debtorParty.displayName, salutation: data.debtorParty.person?.salutation ?? "", address: debtorAddress },
       claim: {
         invoiceNumber: claim.invoiceNumber,
         invoiceDate: this.date(claim.invoiceDate),
@@ -434,7 +484,25 @@ export class DocumentsService {
         iban: settings.iban ?? "",
         bic: settings.bic ?? "",
         bankName: settings.bankName ?? "",
+        registrationCourt: settings.registrationCourt ?? "",
+        registrationNumber: settings.registrationNumber ?? "",
+        collectionRegistrationAuthority: settings.collectionRegistrationAuthority ?? "",
+        collectionRegistrationAddress: settings.collectionRegistrationAddress ?? "",
+        collectionRegistrationContact: settings.collectionRegistrationContact ?? "",
         footer: settings.documentFooter ?? "",
+      },
+      document: { date: this.date(new Date()), paymentDueDate: paymentDueDate ? this.date(new Date(paymentDueDate)) : "" },
+      legalDetails: {
+        rows: data.debtorParty.type === "PERSON" ? [
+          { label: "Auftraggeber", value: data.clientParty.displayName },
+          { label: "Anschrift Auftraggeber", value: `${address(data.clientParty).street} ${address(data.clientParty).houseNumber}`.trim() + `, ${address(data.clientParty).postalCode} ${address(data.clientParty).city}` },
+          { label: "Forderungsgrund", value: claim.description ?? `Rechnung ${claim.invoiceNumber}` },
+          { label: "Rechnungsdatum", value: this.date(claim.invoiceDate) },
+          { label: "Fälligkeit", value: this.date(claim.dueDate) },
+          ...(new Prisma.Decimal(openInterest).gt(0) ? [{ label: "Zinsen bis zum Berechnungsstichtag", value: `${openInterest} EUR` }] : []),
+          ...data.costCalculations.map((calculation) => ({ label: calculation.type === "RVG" ? "Inkassokosten" : "Zinsen", value: `${calculation.calculatedAmount.toFixed(2)} EUR` })),
+          ...(settings.collectionRegistrationAuthority ? [{ label: "Zuständige Aufsichtsbehörde", value: [settings.collectionRegistrationAuthority, settings.collectionRegistrationAddress, settings.collectionRegistrationContact].filter(Boolean).join(" · ") }] : []),
+        ] : [],
       },
       today: this.date(new Date()),
     } as Record<string, unknown>;
@@ -467,11 +535,16 @@ export class DocumentsService {
   private validateTemplate(dto: Pick<TemplateDto, "subject" | "bodyTemplate">) {
     const allowed = new Set([
       "case.caseNumber",
+      "case.status",
+      "case.phase",
+      "document.date",
+      "document.paymentDueDate",
       "client.displayName",
       "client.address.street",
       "client.address.postalCode",
       "client.address.city",
       "debtor.displayName",
+      "debtor.type",
       "debtor.address.street",
       "debtor.address.postalCode",
       "debtor.address.city",
@@ -501,6 +574,11 @@ export class DocumentsService {
       "company.iban",
       "company.bic",
       "company.bankName",
+      "company.registrationCourt",
+      "company.registrationNumber",
+      "company.collectionRegistrationAuthority",
+      "company.collectionRegistrationAddress",
+      "company.collectionRegistrationContact",
     ]);
     for (const value of [dto.subject ?? "", dto.bodyTemplate])
       for (const match of value.matchAll(/{{\s*([\w.]+)\s*}}/g))

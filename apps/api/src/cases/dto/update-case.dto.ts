@@ -1,4 +1,4 @@
-import { CasePhase, CasePriority, CaseStatus, ClaimStatus } from "@prisma/client";
+import { CasePhase, CasePriority, ClaimStatus } from "@prisma/client";
 import { Type } from "class-transformer";
 import {
   IsDateString,
@@ -51,10 +51,6 @@ class UpdateClaimDto {
 }
 
 export class UpdateCaseDto {
-  @IsOptional()
-  @IsEnum(CaseStatus)
-  status?: CaseStatus;
-
   @IsOptional()
   @IsEnum(CasePhase)
   phase?: CasePhase;

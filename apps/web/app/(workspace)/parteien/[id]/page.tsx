@@ -7,7 +7,7 @@ import { PartyDialog } from "@/components/parties/party-dialog";
 import { type PartyDetail } from "@/components/parties/party-api";
 import { Button } from "@/components/ui/button";
 import { PortalPreviewButton } from "@/components/portal/portal-preview-button";
-const API = process.env.NEXT_PUBLIC_API_URL ?? "/api";
+const API = "/api";
 type Party = {
   displayName: string;
   type: string;
@@ -46,7 +46,7 @@ export default function PartyDetailPage() {
   const [error, setError] = React.useState("");
   const [editOpen, setEditOpen] = React.useState(false);
   React.useEffect(() => {
-    void fetch(`${API}/parties/${id}`)
+    void fetch(`${API}/parties/${id}`, { credentials: "include" })
       .then(async (response) => {
         if (!response.ok) throw new Error("Partei wurde nicht gefunden.");
         setParty(await response.json());

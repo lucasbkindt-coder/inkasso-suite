@@ -1,10 +1,5 @@
-import { PagePlaceholder } from "@/components/page-placeholder";
+import { PartiesClient } from "@/components/parties/parties-client";
 
 export default function TenantsPage() {
-  return (
-    <PagePlaceholder
-      description="Hier werden künftig Mandanten und ihre Grundeinstellungen verwaltet."
-      title="Mandanten"
-    />
-  );
+  return <PartiesClient createLabel="Mandant anlegen" description="Auftraggeber und Mandanten im Arbeitsbereich verwalten." role="CLIENT" title="Mandanten" />;
 }

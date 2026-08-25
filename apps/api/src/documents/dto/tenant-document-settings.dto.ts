@@ -19,5 +19,8 @@ export class TenantDocumentSettingsDto {
   @IsOptional() @IsString() bic?: string;
   @IsOptional() @IsString() bankName?: string;
   @IsOptional() @IsString() creditorId?: string;
+  @IsOptional() @IsString() collectionRegistrationAuthority?: string;
+  @IsOptional() @IsString() collectionRegistrationAddress?: string;
+  @IsOptional() @IsString() collectionRegistrationContact?: string;
   @IsOptional() @IsString() documentFooter?: string;
 }

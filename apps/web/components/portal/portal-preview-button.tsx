@@ -22,8 +22,12 @@ export function PortalPreviewButton({
     setLoading(true);
     setError("");
     try {
-      const response = await fetch(`/api/portal-preview/${kind}/${id}`, { method: "POST" });
-      if (!response.ok) throw new Error("Portalvorschau konnte nicht geöffnet werden.");
+      const response = await fetch(`/api/portal-preview/${kind}/${id}`, { method: "POST", credentials: "include" });
+      if (!response.ok) {
+        const body: unknown = await response.json().catch(() => null);
+        const message = typeof body === "object" && body !== null && "message" in body ? String(body.message) : "Portalvorschau konnte nicht geöffnet werden.";
+        throw new Error(message);
+      }
       const data = (await response.json()) as { previewUrl: string };
       previewWindow.location.replace(new URL(data.previewUrl, window.location.origin).toString());
     } catch (cause) {
