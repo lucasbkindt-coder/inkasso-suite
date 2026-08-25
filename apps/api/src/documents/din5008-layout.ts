@@ -120,8 +120,10 @@ export async function renderDin5008Document(subject: string, body: string, snaps
     const infoRows = [
       ["Aktenzeichen", text(get(caseData, "caseNumber"))],
       ["Datum", text(get(document, "date") || get(snapshot, "today"))],
-      ["Telefon", text(get(company, "phone"))],
-      ["E-Mail", text(get(company, "email"))],
+      ["Telefon:", text(get(company, "phone"))],
+      ["Fax:", text(get(company, "fax"))],
+      ["E-Mail:", text(get(company, "email"))],
+      ["Web:", text(get(company, "website"))],
     ].filter(([, value]) => value);
     for (const [label, value] of infoRows) {
       pdf.fillColor(DIN5008_DESIGN.colors.muted).fontSize(DIN5008_DESIGN.fontSize.meta).text(label, infoX, infoY, { width: mm(20) });
@@ -138,7 +140,7 @@ export async function renderDin5008Document(subject: string, body: string, snaps
     pdf.strokeColor(DIN5008_DESIGN.colors.line).lineWidth(0.45).moveTo(LAYOUT.left, LAYOUT.footerLine).lineTo(LAYOUT.right, LAYOUT.footerLine).stroke();
     pdf.fillColor(DIN5008_DESIGN.colors.muted).fontSize(DIN5008_DESIGN.fontSize.footer);
     pdf.text(nonEmpty(text(get(company, "legalName")) || text(get(company, "name")), `${text(get(company, "street"))} ${text(get(company, "houseNumber"))}`.trim(), `${text(get(company, "postalCode"))} ${text(get(company, "city"))}`.trim(), get(company, "registrationCourt") && `Registergericht: ${text(get(company, "registrationCourt"))}`, get(company, "registrationNumber") && `Registernummer: ${text(get(company, "registrationNumber"))}`).join("\n"), LAYOUT.left, LAYOUT.footerTop, { width: mm(42), lineGap: 0.5 });
-    pdf.text(nonEmpty(get(company, "phone"), get(company, "email"), get(company, "website")).join("\n"), mm(65), LAYOUT.footerTop, { width: mm(35), lineGap: 0.5 });
+    pdf.text(nonEmpty(get(company, "phone") && `Telefon: ${text(get(company, "phone"))}`, get(company, "fax") && `Fax: ${text(get(company, "fax"))}`, get(company, "email") && `E-Mail: ${text(get(company, "email"))}`, get(company, "website") && `Web: ${text(get(company, "website"))}`).join("\n"), mm(65), LAYOUT.footerTop, { width: mm(35), lineGap: 0.5 });
     pdf.text(nonEmpty(get(company, "iban") && `IBAN: ${text(get(company, "iban"))}`, get(company, "bic") && `BIC: ${text(get(company, "bic"))}`, get(company, "bankName")).join("\n"), mm(106), LAYOUT.footerTop, { width: mm(41), lineGap: 0.5 });
     pdf.fontSize(5.3).text(nonEmpty(get(company, "collectionRegistrationAuthority"), get(company, "collectionRegistrationAddress"), get(company, "collectionRegistrationContact")).join("\n") || text(get(company, "footer")), mm(151), LAYOUT.footerTop, { width: mm(37), lineGap: 0.5 });
     pdf.fontSize(6).text(`Seite ${page}`, mm(170), mm(288), { width: mm(20), align: "right" });

@@ -3,17 +3,16 @@
 /**
  * One-time, tenant-scoped cleanup for explicitly identified local test tenants.
  *
- * Defaults to a dry run. Run with --apply only after reviewing its output.
- * It intentionally has no heuristic tenant matching and never targets a tenant
- * containing the protected local staff user kindt@payveo.de.
+ * Defaults to a dry run. Run with --execute only after reviewing its output.
+ * It intentionally has no heuristic tenant matching: only this explicit list
+ * of already identified inactive test tenants can ever be targeted.
  */
 const { existsSync, readFileSync } = require("node:fs");
 const { unlink } = require("node:fs/promises");
 const { join } = require("node:path");
 const { PrismaClient } = require("../packages/database/node_modules/@prisma/client");
 
-const PROTECTED_USER_EMAIL = "kindt@payveo.de";
-const TARGET_SLUGS = new Set([
+const EXPLICIT_TEST_TENANT_SLUGS = new Set([
   "audit-temp-20260825132332",
   "audit-temp-1787664247552",
   "audit-isolation-1787664314167",
@@ -35,6 +34,23 @@ if (!process.env.DATABASE_URL) {
 
 const prisma = new PrismaClient();
 const documentStorageRoot = join(__dirname, "..", ".data", "documents");
+
+function assertLocalDevelopmentDatabase() {
+  if (process.env.NODE_ENV === "production") {
+    throw new Error("Safety stop: Testdaten-Cleanup ist mit NODE_ENV=production nicht zulässig.");
+  }
+  let url;
+  try {
+    url = new URL(process.env.DATABASE_URL);
+  } catch {
+    throw new Error("Safety stop: DATABASE_URL ist ungültig.");
+  }
+  const database = url.pathname.replace(/^\//, "").split("/")[0];
+  const localHosts = new Set(["localhost", "127.0.0.1", "::1", "postgres"]);
+  if (!localHosts.has(url.hostname) || !database || /prod(uction)?/i.test(url.hostname) || /prod(uction)?/i.test(database)) {
+    throw new Error("Safety stop: DATABASE_URL ist kein eindeutig lokales Entwicklungsziel.");
+  }
+}
 
 const countModels = [
   "party",
@@ -129,19 +145,31 @@ async function deleteTenantData(tenantId) {
 }
 
 async function main() {
-  const apply = process.argv.includes("--apply");
-  const targets = await prisma.tenant.findMany({ where: { slug: { in: [...TARGET_SLUGS] } }, orderBy: { slug: "asc" } });
+  assertLocalDevelopmentDatabase();
+  const execute = process.argv.includes("--execute");
+  if (process.argv.includes("--apply")) {
+    throw new Error("--apply wird nicht unterstützt. Nach dem Dry Run ist --execute erforderlich.");
+  }
+  const targets = await prisma.tenant.findMany({ where: { slug: { in: [...EXPLICIT_TEST_TENANT_SLUGS] } }, orderBy: { slug: "asc" } });
   const reports = [];
   for (const tenant of targets) {
-    const containsProtectedUser = await prisma.tenantMembership.count({
-      where: { tenantId: tenant.id, user: { email: PROTECTED_USER_EMAIL } },
+    if (tenant.isActive || !tenant.deletedAt || !EXPLICIT_TEST_TENANT_SLUGS.has(tenant.slug)) {
+      throw new Error(`Safety stop: ${tenant.slug} ist kein eindeutig inaktiver Testtenant.`);
+    }
+    const membersInActiveTenants = await prisma.tenantMembership.count({
+      where: {
+        tenantId: tenant.id,
+        user: { memberships: { some: { tenant: { isActive: true, deletedAt: null } } } },
+      },
     });
-    if (containsProtectedUser) throw new Error(`Safety stop: protected user belongs to ${tenant.slug}.`);
+    if (membersInActiveTenants) {
+      throw new Error(`Safety stop: ${tenant.slug} enthält einen Benutzer mit Membership in einem aktiven Tenant.`);
+    }
     reports.push(await tenantReport(tenant));
   }
 
-  console.log(JSON.stringify({ mode: apply ? "apply" : "dry-run", protectedUser: PROTECTED_USER_EMAIL, reports }, null, 2));
-  if (!apply) return;
+  console.log(JSON.stringify({ mode: execute ? "execute" : "dry-run", reports }, null, 2));
+  if (!execute) return;
 
   const formerMemberUserIds = new Set();
   for (const { tenant } of reports) {
@@ -155,7 +183,7 @@ async function main() {
       id: { in: [...formerMemberUserIds] },
       memberships: { none: {} },
       staffSessions: { none: {} },
-      AND: [{ email: { not: PROTECTED_USER_EMAIL } }, { email: { endsWith: ".test" } }],
+      email: { endsWith: ".test" },
     },
     select: { id: true, email: true },
   });

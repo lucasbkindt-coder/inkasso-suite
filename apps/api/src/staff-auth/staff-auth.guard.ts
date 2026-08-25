@@ -5,7 +5,7 @@ import { readCookie } from "../portal-auth/portal-auth.controller";
 import { STAFF_SESSION_COOKIE, StaffAuthService } from "./staff-auth.service";
 import { isAllowedStaffOrigin } from "./staff-origin.guard";
 
-const isPublicPath = (path: string) => path === "/auth/login" || path.startsWith("/portal/");
+const isPublicPath = (path: string) => path === "/health" || path === "/auth/login" || path.startsWith("/portal/");
 
 @Injectable()
 export class StaffAuthGuard implements CanActivate {

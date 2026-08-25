@@ -17,9 +17,9 @@ docker compose up -d
 pnpm dev
 ```
 
-Die NestJS-Laufzeit ist danach unter `http://localhost:3001` erreichbar. Es gibt
-bewusst noch keine API-Endpunkte. Das Frontend wird erst mit der späteren
-Frontend-Implementierung gestartet.
+Die Web-Anwendung ist danach unter `http://localhost:3000`, die NestJS-API
+unter `http://localhost:3001` erreichbar. Der API-Healthcheck ist
+`http://localhost:3001/health`.
 
 ## Datenbankwerkzeuge
 
@@ -37,6 +37,14 @@ Daten liegen im Docker-Volume `postgres-data`.
 ```bash
 pnpm infra:down
 ```
+
+## Lokaler Arbeitsdaten-Schutz
+
+Der lokale Entwicklungs-Tenant kann Arbeitsdaten enthalten. Vor Migrationen
+oder gezielten Testdaten-Cleanups ein Backup erstellen und niemals
+`prisma migrate reset` gegen diese Datenbank ausführen. Die Betriebsanleitung
+für Backup, Restore, Storage-Audit und sichere Testdatenbereinigung steht in
+[docs/development-workspace.md](docs/development-workspace.md).
 
 ## Workspaces
 

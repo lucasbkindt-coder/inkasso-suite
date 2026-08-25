@@ -163,7 +163,7 @@ const systemRoles = [
 async function main() {
   const tenant = await prisma.tenant.upsert({
     where: { slug: "inkasso-suite" },
-    update: { deletedAt: null, isActive: true, name: "Inkasso Suite" },
+    update: {},
     create: { name: "Inkasso Suite", slug: "inkasso-suite" },
   });
 
@@ -175,13 +175,13 @@ async function main() {
   });
   const admin = await prisma.user.upsert({
     where: { email: "admin@example.com" },
-    update: { deletedAt: null, isActive: true, passwordHash: adminPasswordHash, passwordMustChange: false },
+    update: {},
     create: { email: "admin@example.com", displayName: "Tenant Owner", passwordHash: adminPasswordHash },
   });
 
   const membership = await prisma.tenantMembership.upsert({
     where: { tenantId_userId: { tenantId: tenant.id, userId: admin.id } },
-    update: { deletedAt: null, status: MembershipStatus.ACTIVE },
+    update: {},
     create: { tenantId: tenant.id, userId: admin.id, status: MembershipStatus.ACTIVE },
   });
 
@@ -215,11 +215,7 @@ async function main() {
   await seedDocumentTemplates(tenant.id);
   await prisma.tenantDocumentSettings.upsert({
     where: { tenantId: tenant.id },
-    update: {
-      collectionRegistrationAuthority: "Landesamt für Bürger- und Ordnungsangelegenheiten",
-      collectionRegistrationAddress: "Puttkamerstraße 16–18, 10969 Berlin",
-      collectionRegistrationContact: "https://www.berlin.de/labo/",
-    },
+    update: {},
     create: {
       tenantId: tenant.id,
       companyName: "payveo Entwicklungsumgebung",
@@ -326,11 +322,10 @@ async function seedDocumentTemplates(tenantId) {
     const professionalBody = professionalBodies[key] ?? bodyTemplate;
     await prisma.documentTemplate.upsert({
       where: { tenantId_key_version: { tenantId, key, version: 1 } },
-      update: { name, type, subject, bodyTemplate: professionalBody, status: "ACTIVE" },
+      update: {},
       create: { tenantId, key, name, type, version: 1, status: "ACTIVE", subject, bodyTemplate: professionalBody },
     });
   }
-  await prisma.documentTemplate.updateMany({ where: { tenantId, key: "payment-request", status: "ACTIVE" }, data: { status: "ARCHIVED" } });
 }
 
 async function seedRvgReferenceData() {

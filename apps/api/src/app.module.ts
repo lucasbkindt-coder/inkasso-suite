@@ -19,10 +19,12 @@ import { InstallmentPlansModule } from "./installment-plans/installment-plans.mo
 import { StaffAuthModule } from "./staff-auth/staff-auth.module";
 import { ActivityModule } from "./activity/activity.module";
 import { EnforcementModule } from "./enforcement/enforcement.module";
+import { HealthModule } from "./health/health.module";
 
 @Module({
   imports: [
     CoreModule,
+    HealthModule,
     ActivityModule,
     EnforcementModule,
     StaffAuthModule,
