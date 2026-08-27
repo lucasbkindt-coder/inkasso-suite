@@ -6,6 +6,17 @@ import { PortalAccessService, type PortalAccessContext } from "../portal-auth/po
 import { PrismaService } from "../prisma/prisma.service";
 
 const costTypes = new Set<LedgerEntryType>([LedgerEntryType.COLLECTION_FEE, LedgerEntryType.EXPENSE, LedgerEntryType.COURT_COST, LedgerEntryType.ENFORCEMENT_COST]);
+const debtorDocumentLabels: Partial<Record<string, string>> = {
+  PAYMENT_REQUEST: "Zahlungsaufforderung",
+  SECOND_PAYMENT_REQUEST: "Zweite Zahlungsaufforderung",
+  JUDICIAL_DUNNING_NOTICE: "Ankündigung gerichtliches Mahnverfahren",
+  ENFORCEMENT_NOTICE: "Vollstreckungsankündigung",
+  PAYMENT_PLAN: "Ratenplan",
+  TITLE_NOTIFICATION: "Mitteilung der Titulierung",
+  CASE_SETTLED: "Erledigterklärung",
+  CLAIM_STATEMENT: "Forderungsaufstellung",
+  PAYMENT_CONFIRMATION: "Zahlungsbestätigung",
+};
 type AccessInput = { previewToken?: string; sessionToken?: string };
 
 @Injectable()
@@ -63,7 +74,36 @@ export class PortalService {
 
   async debtorDocuments(input: AccessInput) {
     const context = await this.debtorContext(input);
-    return this.documents(await this.focusedDebtorCase(context), context.tenantId, [PortalVisibility.DEBTOR, PortalVisibility.BOTH]);
+    const documents = await this.prisma.caseDocument.findMany({
+      where: {
+        tenantId: context.tenantId,
+        status: { not: DocumentStatus.VOIDED },
+        portalVisibility: { in: [PortalVisibility.DEBTOR, PortalVisibility.BOTH] },
+        case: { debtorPartyId: context.partyId, deletedAt: null },
+      },
+      select: {
+        id: true,
+        type: true,
+        generatedAt: true,
+        storageKey: true,
+        template: { select: { name: true } },
+        case: { select: { caseNumber: true } },
+      },
+      orderBy: { generatedAt: "desc" },
+    });
+    const availability = await Promise.all(
+      documents.map(async (document) => ({ document, available: await this.storage.exists(document.storageKey) })),
+    );
+    return availability
+      .filter(({ available }) => available)
+      .map(({ document }) => ({
+        documentId: document.id,
+        documentName: document.template?.name ?? debtorDocumentLabels[document.type] ?? "Dokument",
+        createdAt: document.generatedAt,
+        documentDate: document.generatedAt,
+        caseNumber: document.case.caseNumber,
+        canDownload: true,
+      }));
   }
 
   async context(input: AccessInput) {
@@ -77,6 +117,9 @@ export class PortalService {
     const caseScope = context.portalType === "CLIENT" ? { clientPartyId: context.partyId } : { debtorPartyId: context.partyId };
     const document = await this.prisma.caseDocument.findFirst({ where: { id, tenantId: context.tenantId, status: { not: DocumentStatus.VOIDED }, portalVisibility: { in: visibility }, case: caseScope }, select: { filename: true, mimeType: true, storageKey: true } });
     if (!document) throw new NotFoundException("Dokument wurde nicht gefunden.");
+    if (!(await this.storage.exists(document.storageKey))) {
+      throw new NotFoundException("Die Dokumentdatei ist nicht verfügbar.");
+    }
     return { ...document, buffer: await this.storage.read(document.storageKey) };
   }
 

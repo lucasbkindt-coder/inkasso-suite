@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
-import { ActivityEventType, DocumentDeliveryChannel, DocumentDeliveryStatus, DocumentStatus, PortalAccountStatus, PortalAccountType, Prisma, TemplateStatus } from "@prisma/client";
+import { ActivityEventType, DocumentDeliveryChannel, DocumentDeliveryStatus, DocumentStatus, PortalAccountStatus, PortalAccountType, PortalVisibility, Prisma, TemplateStatus } from "@prisma/client";
 import { ActivityService } from "../activity/activity.service";
 import QRCode from "qrcode";
 import { PortalAuthService } from "../portal-auth/portal-auth.service";
@@ -13,6 +13,21 @@ import { renderDin5008Document } from "./din5008-layout";
 import { MailService } from "./mail.service";
 
 const INITIAL_DEBTOR_PORTAL_TEMPLATE_KEYS = new Set(["payment-request-consumer"]);
+// Only documents addressed to the debtor are exposed in the debtor portal.
+// Court and enforcement work product deliberately remains internal.
+const DEBTOR_PORTAL_VISIBLE_TEMPLATE_KEYS = new Set([
+  "payment-request",
+  "payment-request-consumer",
+  "payment-request-business",
+  "payment-reminder",
+  "court-dunning-notice",
+  "enforcement-notice",
+  "title-notification",
+  "claim-statement",
+  "case-settled",
+  "installment-agreement",
+  "installment-default-notice",
+]);
 type SystemTemplateRule = {
   filename: string;
   requiresOpenBalance: boolean;
@@ -230,6 +245,9 @@ export class DocumentsService {
             templateId: template.id,
             type: template.type,
             status: DocumentStatus.GENERATED,
+            portalVisibility: DEBTOR_PORTAL_VISIBLE_TEMPLATE_KEYS.has(template.key)
+              ? PortalVisibility.DEBTOR
+              : PortalVisibility.INTERNAL,
             filename,
             storageKey: documentStorageKey,
             templateVersion: template.version,

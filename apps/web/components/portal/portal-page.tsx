@@ -240,13 +240,25 @@ export function DebtorPortal({ view }: { view: "summary" | "claim" | "documents"
       ) : view === "documents" ? (
         <>
           <h1 className="text-2xl font-semibold">Dokumente</h1>
-          {(data as unknown as Data[]).map((d) => (
-            <p className="mt-3 rounded-xl border bg-card p-4" key={String(d.id)}>
-              <FileText className="mr-2 inline size-4" />
-              {String(d.filename)} · {formatDate(String(d.generatedAt))}
-              <PortalDownloadButton id={String(d.id)} token={token} />
-            </p>
-          ))}
+          {(data as unknown as Data[]).length ? (
+            <div className="mt-4 space-y-3">
+              {(data as unknown as Data[]).map((d) => (
+                <article className="rounded-xl border bg-card p-4" key={String(d.documentId)}>
+                  <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
+                    <div>
+                      <p className="font-medium"><FileText className="mr-2 inline size-4" />{String(d.documentName)}</p>
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        Aktenzeichen: {String(d.caseNumber)} · {formatDate(String(d.documentDate ?? d.createdAt))}
+                      </p>
+                    </div>
+                    <PortalDownloadButton id={String(d.documentId)} token={token} />
+                  </div>
+                </article>
+              ))}
+            </div>
+          ) : (
+            <p className="mt-4 text-sm text-muted-foreground">Derzeit sind keine Dokumente für Sie hinterlegt.</p>
+          )}
         </>
       ) : view === "summary" ? (
         <DebtorOverview data={data} token={token} />
