@@ -9,8 +9,11 @@ import { Button } from "@/components/ui/button";
 import { PortalPreviewButton } from "@/components/portal/portal-preview-button";
 import { ActivityList } from "@/components/activity/activity-list";
 import { partyApi } from "@/components/parties/party-api";
+import { caseApi } from "@/components/cases/case-api";
+import { CommunicationPanel } from "@/components/communications/communication-panel";
 const API = "/api";
 type Party = {
+  id: string;
   displayName: string;
   type: string;
   createdAt: string;
@@ -47,6 +50,7 @@ export default function PartyDetailPage() {
   const [party, setParty] = React.useState<Party | null>(null);
   const [error, setError] = React.useState("");
   const [editOpen, setEditOpen] = React.useState(false);
+  const [cases, setCases] = React.useState<{ id: string; caseNumber: string }[]>([]);
   React.useEffect(() => {
     void fetch(`${API}/parties/${id}`, { credentials: "include" })
       .then(async (response) => {
@@ -56,6 +60,9 @@ export default function PartyDetailPage() {
       .catch((cause) =>
         setError(cause instanceof Error ? cause.message : "Partei konnte nicht geladen werden."),
       );
+  }, [id]);
+  React.useEffect(() => {
+    void caseApi.getCases({ debtorPartyId: id, pageSize: 100 }).then((result) => setCases(result.items.map((item) => ({ id: item.id, caseNumber: item.caseNumber })))).catch(() => setCases([]));
   }, [id]);
   if (error) return <p className="text-destructive">{error}</p>;
   if (!party) return <p className="text-muted-foreground">Partei wird geladen …</p>;
@@ -144,6 +151,7 @@ export default function PartyDetailPage() {
           />
         </Section>
       </div>
+      {party.roles.some((role) => role.role === "DEBTOR") ? <CommunicationPanel cases={cases} partyId={party.id} /> : null}
       <ActivityList load={(page) => partyApi.activities(id, page)} />
       <PartyDialog
         onOpenChange={setEditOpen}

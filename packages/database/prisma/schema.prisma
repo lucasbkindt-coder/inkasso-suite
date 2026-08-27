@@ -274,6 +274,11 @@ enum InstallmentPlanStatus {
   DEFAULTED
 }
 
+enum InstallmentPlanSource {
+  PORTAL_REQUEST
+  STAFF
+}
+
 enum InstallmentPlanItemStatus {
   OPEN
   PARTIALLY_PAID
@@ -329,6 +334,9 @@ enum ActivityEventType {
   INSTALLMENT_PLAN_CANCELLED
   INSTALLMENT_PLAN_DEFAULTED
   INSTALLMENT_PLAN_COMPLETED
+  COMMUNICATION_CREATED
+  COMMUNICATION_UPDATED
+  COMMUNICATION_ATTACHMENT_ADDED
   PORTAL_ACCOUNT_CREATED
   PORTAL_ACTIVATION_ISSUED
   TITLE_CREATED
@@ -337,6 +345,33 @@ enum ActivityEventType {
   TITLE_SATISFIED
   ENFORCEMENT_ACTION_CREATED
   ENFORCEMENT_ACTION_STATUS_CHANGED
+}
+
+enum CommunicationDirection {
+  INBOUND
+  OUTBOUND
+}
+
+enum CommunicationChannel {
+  PHONE
+  EMAIL
+  LETTER
+  PORTAL
+  IN_PERSON
+  OTHER
+}
+
+enum CommunicationSource {
+  MANUAL
+  PORTAL
+  EXTERNAL
+}
+
+enum CommunicationAttachmentType {
+  ORIGINAL_MESSAGE
+  ATTACHMENT
+  LETTER
+  OTHER
 }
 
 model User {
@@ -452,6 +487,8 @@ model Tenant {
   activityEvents      ActivityEvent[]
   enforcementTitles   EnforcementTitle[]
   enforcementActions  EnforcementAction[]
+  communications      CommunicationEvent[]
+  communicationAttachments CommunicationAttachment[]
 
   @@index([deletedAt])
 }
@@ -493,6 +530,7 @@ model Case {
   activityEvents      ActivityEvent[]
   enforcementTitles   EnforcementTitle[]
   enforcementActions  EnforcementAction[]
+  communications      CommunicationEvent[]
 
   @@unique([tenantId, caseNumber])
   @@unique([tenantId, sequenceYear, sequenceNumber])
@@ -885,6 +923,7 @@ model Party {
   installmentRequests InstallmentRequest[]
   installmentPlans    InstallmentPlan[]
   activityEvents      ActivityEvent[]
+  communications      CommunicationEvent[]
 
   @@index([tenantId, deletedAt, displayName])
   @@index([tenantId, type, deletedAt])
@@ -925,7 +964,8 @@ model InstallmentPlan {
   tenantId                 String                @db.Uuid
   caseId                   String                @db.Uuid
   debtorPartyId            String                @db.Uuid
-  sourceRequestId          String                @unique @db.Uuid
+  sourceRequestId          String?               @unique @db.Uuid
+  source                   InstallmentPlanSource @default(PORTAL_REQUEST)
   status                   InstallmentPlanStatus @default(DRAFT)
   initialOpenAmount        Decimal               @db.Decimal(15, 2)
   plannedInstallmentAmount Decimal               @db.Decimal(15, 2)
@@ -945,7 +985,7 @@ model InstallmentPlan {
   debtorParty   Party              @relation(fields: [debtorPartyId], references: [id], onDelete: Restrict)
   createdByMembership TenantMembership? @relation("CreatedInstallmentPlans", fields: [createdByMembershipId], references: [id], onDelete: Restrict)
   cancelledByMembership TenantMembership? @relation("CancelledInstallmentPlans", fields: [cancelledByMembershipId], references: [id], onDelete: Restrict)
-  sourceRequest InstallmentRequest @relation(fields: [sourceRequestId], references: [id], onDelete: Restrict)
+  sourceRequest InstallmentRequest? @relation(fields: [sourceRequestId], references: [id], onDelete: Restrict)
   items         InstallmentPlanItem[]
 
   @@index([tenantId, caseId, status])
@@ -1054,6 +1094,53 @@ model ActivityEvent {
   @@index([partyId, createdAt])
   @@index([actorMembershipId])
   @@index([actorPortalAccountId])
+}
+
+model CommunicationEvent {
+  id                    String                 @id @default(uuid()) @db.Uuid
+  tenantId              String                 @db.Uuid
+  partyId               String                 @db.Uuid
+  caseId                String?                @db.Uuid
+  direction             CommunicationDirection
+  channel               CommunicationChannel
+  source                CommunicationSource    @default(MANUAL)
+  occurredAt            DateTime
+  subject               String?
+  summary               String
+  externalReference     String?
+  durationSeconds       Int?
+  createdByMembershipId String                 @db.Uuid
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @updatedAt
+
+  tenant             Tenant            @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  party              Party             @relation(fields: [partyId], references: [id], onDelete: Restrict)
+  case               Case?             @relation(fields: [caseId], references: [id], onDelete: Restrict)
+  createdByMembership TenantMembership @relation("CommunicationCreatedBy", fields: [createdByMembershipId], references: [id], onDelete: Restrict)
+  attachments        CommunicationAttachment[]
+
+  @@index([tenantId, partyId, occurredAt])
+  @@index([tenantId, caseId, occurredAt])
+  @@index([createdByMembershipId])
+}
+
+model CommunicationAttachment {
+  id              String                      @id @default(uuid()) @db.Uuid
+  tenantId        String                      @db.Uuid
+  communicationId String                      @db.Uuid
+  attachmentType  CommunicationAttachmentType @default(ATTACHMENT)
+  originalFileName String                     @db.VarChar(255)
+  mimeType        String                      @db.VarChar(150)
+  size            Int
+  storageKey      String                      @unique
+  sha256          String?                     @db.Char(64)
+  metadata        Json?
+  createdAt       DateTime                    @default(now())
+
+  tenant        Tenant             @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  communication CommunicationEvent @relation(fields: [communicationId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId, communicationId])
 }
 
 model Person {
@@ -1196,6 +1283,7 @@ model TenantMembership {
   activityEvents      ActivityEvent[]      @relation("ActivityActorMembership")
   createdEnforcementTitles EnforcementTitle[] @relation("EnforcementTitleCreatedBy")
   createdEnforcementActions EnforcementAction[] @relation("EnforcementActionCreatedBy")
+  createdCommunications CommunicationEvent[] @relation("CommunicationCreatedBy")
 
   @@unique([tenantId, userId])
   @@index([userId, deletedAt])

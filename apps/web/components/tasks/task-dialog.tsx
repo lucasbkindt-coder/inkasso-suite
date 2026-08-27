@@ -16,6 +16,7 @@ type FormValues = {
   description: string;
   dueAt: string;
   followUpAt: string;
+  assignedMembershipId: string;
 };
 
 const emptyValues: FormValues = {
@@ -26,6 +27,7 @@ const emptyValues: FormValues = {
   description: "",
   dueAt: "",
   followUpAt: "",
+  assignedMembershipId: "",
 };
 
 const dateValue = (value: string | null) => value?.slice(0, 10) ?? "";
@@ -42,6 +44,7 @@ export function TaskDialog({ caseId, onOpenChange, onSaved, open, task = null }:
   const [values, setValues] = React.useState<FormValues>(emptyValues);
   const [cases, setCases] = React.useState<{ id: string; caseNumber: string; client: string; debtor: string }[]>([]);
   const [casesLoading, setCasesLoading] = React.useState(false);
+  const [members, setMembers] = React.useState<{ membershipId: string; displayName: string; email: string }[]>([]);
   const [saving, setSaving] = React.useState(false);
   const [error, setError] = React.useState("");
 
@@ -56,11 +59,17 @@ export function TaskDialog({ caseId, onOpenChange, onSaved, open, task = null }:
             description: task.description ?? "",
             dueAt: dateValue(task.dueAt),
             followUpAt: dateValue(task.followUpAt),
+            assignedMembershipId: task.assignedMembershipId ?? "",
           }
         : { ...emptyValues, caseId: caseId ?? "" },
     );
     setError("");
   }, [caseId, open, task]);
+
+  React.useEffect(() => {
+    if (!open) return;
+    void caseApi.getStaffMembers().then(setMembers).catch(() => setError("Mitarbeiter konnten nicht geladen werden."));
+  }, [open]);
 
   React.useEffect(() => {
     if (!open || caseId) return;
@@ -108,6 +117,7 @@ export function TaskDialog({ caseId, onOpenChange, onSaved, open, task = null }:
       description: values.description || undefined,
       dueAt: values.dueAt || undefined,
       followUpAt: values.followUpAt || undefined,
+      assignedMembershipId: values.assignedMembershipId || undefined,
     };
 
     try {
@@ -164,6 +174,13 @@ export function TaskDialog({ caseId, onOpenChange, onSaved, open, task = null }:
               Priorität
               <select className="h-10 rounded-lg border bg-background px-3" onChange={(event) => setValue("priority", event.target.value as TaskPriority)} value={values.priority}>
                 {(["LOW", "NORMAL", "HIGH", "URGENT"] as TaskPriority[]).map((value) => <option key={value} value={value}>{taskLabels[value]}</option>)}
+              </select>
+            </label>
+            <label className="grid gap-1 text-sm">
+              Zuständig
+              <select className="h-10 rounded-lg border bg-background px-3" disabled={saving} onChange={(event) => setValue("assignedMembershipId", event.target.value)} value={values.assignedMembershipId}>
+                <option value="">Nicht zugewiesen</option>
+                {members.map((member) => <option key={member.membershipId} value={member.membershipId}>{member.displayName} · {member.email}</option>)}
               </select>
             </label>
             <label className="grid gap-1 text-sm">Fälligkeit<input className="h-10 rounded-lg border bg-background px-3" onChange={(event) => setValue("dueAt", event.target.value)} type="date" value={values.dueAt} /></label>

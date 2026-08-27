@@ -148,6 +148,7 @@ export const caseApi = {
   approveInstallmentRequest: (id: string) => request<InstallmentRequest>(`/installment-requests/${id}/approve`, { method: "POST" }),
   rejectInstallmentRequest: (id: string) => request<InstallmentRequest>(`/installment-requests/${id}/reject`, { method: "POST" }),
   createInstallmentPlan: (id: string) => request<InstallmentPlan>(`/installment-requests/${id}/create-plan`, { method: "POST" }),
+  createStaffInstallmentPlan: (caseId: string, payload: { plannedInstallmentAmount: string; numberOfInstallments?: number; startDate: string }) => request<InstallmentPlan>(`/cases/${caseId}/installment-plans`, { method: "POST", body: JSON.stringify(payload) }),
   getInstallmentPlans: () => request<InstallmentPlan[]>("/installment-plans"),
   getInstallmentPlan: (id: string) => request<InstallmentPlan>(`/installment-plans/${id}`),
   activateInstallmentPlan: (id: string) => request<InstallmentPlan>(`/installment-plans/${id}/activate`, { method: "POST" }),
@@ -196,6 +197,7 @@ export const caseApi = {
   transitionCaseStatus: (id: string, targetStatus: Case["status"]) =>
     request<Case>(`/cases/${id}/status-transition`, { method: "POST", body: JSON.stringify({ targetStatus }) }),
   getStaffMembers: () => request<{ membershipId: string; displayName: string; email: string; roles: string[] }[]>("/staff/members"),
+  getStaffSession: () => request<{ membership: { id: string }; roles: string[] }>("/auth/session"),
   getTasks: (query: TasksQuery = {}) => {
     const suffix = queryString(query);
     return request<TasksResponse>(`/tasks${suffix ? `?${suffix}` : ""}`);

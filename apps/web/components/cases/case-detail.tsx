@@ -15,6 +15,7 @@ import { CaseInstallmentPlan } from "./case-installment-plan";
 import { CaseAssignee } from "./case-assignee";
 import { CaseTimeline } from "./case-timeline";
 import { CaseEnforcement } from "./case-enforcement";
+import { CommunicationPanel } from "@/components/communications/communication-panel";
 
 export function CaseDetail() {
   const params = useParams<{ id: string }>();
@@ -54,6 +55,7 @@ export function CaseDetail() {
         <CaseAssignee caseRecord={caseRecord} onAssigned={setCaseRecord} />
         <CaseOverview caseRecord={caseRecord} />
         <CaseTasks caseId={caseRecord.id} />
+        <CommunicationPanel caseId={caseRecord.id} partyId={caseRecord.debtorParty.id} />
         <CaseDocuments caseId={caseRecord.id} caseStatus={caseRecord.status} debtorType={caseRecord.debtorParty.type} />
         <CaseInstallmentPlan caseId={caseRecord.id} />
         <CaseEnforcement caseId={caseRecord.id} />

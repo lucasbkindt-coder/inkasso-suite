@@ -13,6 +13,7 @@ import { DashboardModule } from "./dashboard/dashboard.module";
 import { PortalPreviewModule } from "./portal-preview/portal-preview.module";
 import { PortalModule } from "./portal/portal.module";
 import { ClientSubmissionsModule } from "./client-submissions/client-submissions.module";
+import { CommunicationsModule } from "./communications/communications.module";
 import { PortalAuthModule } from "./portal-auth/portal-auth.module";
 import { InstallmentRequestsModule } from "./installment-requests/installment-requests.module";
 import { InstallmentPlansModule } from "./installment-plans/installment-plans.module";
@@ -40,6 +41,7 @@ import { HealthModule } from "./health/health.module";
     PortalPreviewModule,
     PortalModule,
     ClientSubmissionsModule,
+    CommunicationsModule,
     PortalAuthModule,
     InstallmentRequestsModule,
     InstallmentPlansModule,

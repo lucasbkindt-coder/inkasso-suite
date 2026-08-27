@@ -6,8 +6,9 @@ import { join } from "node:path";
 @Injectable()
 export class LocalDocumentStorage {
   private readonly root = join(process.cwd(), "../../.data/documents");
-  async save(buffer: Buffer) {
-    const key = `${randomUUID()}.pdf`;
+  async save(buffer: Buffer, extension = "pdf") {
+    const normalizedExtension = extension.toLowerCase().replace(/[^a-z0-9]/g, "") || "bin";
+    const key = `${randomUUID()}.${normalizedExtension}`;
     await mkdir(this.root, { recursive: true });
     await writeFile(join(this.root, key), buffer);
     return key;

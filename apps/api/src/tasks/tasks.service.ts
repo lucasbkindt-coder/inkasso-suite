@@ -36,7 +36,7 @@ export class TasksService {
     if (dto.assignedMembershipId) await this.assertMembership(dto.assignedMembershipId, tenantId);
     return this.prisma.$transaction(async (tx) => {
       const task = await tx.caseTask.create({ data: { tenantId, caseId: dto.caseId, type: dto.type, priority: dto.priority, title: dto.title.trim(), description: dto.description, dueAt: dto.dueAt ? new Date(dto.dueAt) : undefined, followUpAt: dto.followUpAt ? new Date(dto.followUpAt) : undefined, assignedMembershipId: dto.assignedMembershipId, createdByMembershipId: this.tenant.getStaffContext().tenantMembershipId }, include: detailInclude });
-      await this.record(tx, tenantId, task.caseId, ActivityEventType.TASK_CREATED, `Aufgabe „${task.title}“ wurde angelegt.`, { taskId: task.id, type: task.type });
+      await this.record(tx, tenantId, task.caseId, ActivityEventType.TASK_CREATED, `Aufgabe „${task.title}“ wurde angelegt.`, { taskId: task.id, type: task.type, assignedMembershipId: task.assignedMembershipId });
       return task;
     });
   }
@@ -47,7 +47,7 @@ export class TasksService {
     this.validateDates(type, dueAt, followUpAt);
     return this.prisma.$transaction(async (tx) => {
       const task = await tx.caseTask.update({ where: { id }, data: { type: dto.type, priority: dto.priority, title: dto.title?.trim(), description: dto.description, dueAt: dto.dueAt === undefined ? undefined : new Date(dto.dueAt), followUpAt: dto.followUpAt === undefined ? undefined : new Date(dto.followUpAt), assignedMembershipId: dto.assignedMembershipId }, include: detailInclude });
-      await this.record(tx, tenantId, task.caseId, ActivityEventType.TASK_UPDATED, `Aufgabe „${task.title}“ wurde bearbeitet.`, { taskId: task.id, changedFields: Object.keys(dto) });
+      await this.record(tx, tenantId, task.caseId, ActivityEventType.TASK_UPDATED, `Aufgabe „${task.title}“ wurde bearbeitet.`, { taskId: task.id, changedFields: Object.keys(dto), previousAssignedMembershipId: current.assignedMembershipId, assignedMembershipId: task.assignedMembershipId });
       return task;
     });
   }

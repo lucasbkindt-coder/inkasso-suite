@@ -72,7 +72,7 @@ async function loadContext() {
 async function dryRun() {
   const context = await loadContext();
   const tenantId = context.tenant.id;
-  const [events, cases, parties, ledgerEntries, documents, tasks, installmentRequests, installmentPlans, titles, actions, clientSubmissions, portalAccounts] = await Promise.all([
+  const [events, cases, parties, ledgerEntries, documents, tasks, installmentRequests, installmentPlans, titles, actions, clientSubmissions, portalAccounts, communications] = await Promise.all([
     prisma.activityEvent.findMany({ where: { tenantId }, select: { eventType: true, sourceEntityType: true, sourceEntityId: true, caseId: true, partyId: true, actorMembershipId: true } }),
     prisma.case.findMany({ where: { tenantId }, select: { id: true, clientPartyId: true, debtorPartyId: true } }),
     prisma.party.findMany({ where: { tenantId }, select: { id: true, type: true } }),
@@ -85,6 +85,7 @@ async function dryRun() {
     prisma.enforcementAction.findMany({ where: { tenantId }, select: { id: true, caseId: true, createdByMembershipId: true } }),
     prisma.clientSubmission.findMany({ where: { tenantId }, select: { id: true, clientPartyId: true, acceptedCaseId: true, reviewedByMembershipId: true } }),
     prisma.portalAccount.findMany({ where: { tenantId }, select: { id: true, partyId: true } }),
+    prisma.communicationEvent.findMany({ where: { tenantId }, select: { id: true, caseId: true, partyId: true } }),
   ]);
 
   const caseCreators = ownerIndex(events, "CASE_CREATED", "Case");
@@ -121,6 +122,13 @@ async function dryRun() {
   const deleteCaseIds = caseClassifications.filter((item) => item.kind === "FOREIGN").map((item) => item.id);
   const deletePartyIds = partyClassifications.filter((item) => item.kind === "FOREIGN").map((item) => item.id);
   const deleteDocuments = documents.filter((document) => deleteCaseIds.includes(document.caseId));
+  const deleteCommunicationIds = communications
+    .filter((communication) => deleteCaseIds.includes(communication.caseId) || deletePartyIds.includes(communication.partyId))
+    .map((communication) => communication.id);
+  const deleteCommunicationAttachments = await prisma.communicationAttachment.findMany({
+    where: { communicationId: { in: deleteCommunicationIds } },
+    select: { storageKey: true },
+  });
 
   const review = [
     ...caseClassifications.filter((item) => item.kind === "REVIEW").map(({ id, reason }) => ({ id, type: "Case", reason })),
@@ -135,15 +143,17 @@ async function dryRun() {
     paymentAllocations: await prisma.paymentAllocation.count({ where: { caseId: { in: deleteCaseIds } } }),
     tasks: await prisma.caseTask.count({ where: { caseId: { in: deleteCaseIds } } }),
     documents: deleteDocuments.length,
+    communications: deleteCommunicationIds.length,
+    communicationAttachments: deleteCommunicationAttachments.length,
     installmentRequests: await prisma.installmentRequest.count({ where: { caseId: { in: deleteCaseIds } } }),
     installmentPlans: await prisma.installmentPlan.count({ where: { caseId: { in: deleteCaseIds } } }),
     titles: await prisma.enforcementTitle.count({ where: { caseId: { in: deleteCaseIds } } }),
     enforcementActions: await prisma.enforcementAction.count({ where: { caseId: { in: deleteCaseIds } } }),
     activities: await prisma.activityEvent.count({ where: { tenantId, OR: [{ caseId: { in: deleteCaseIds } }, { partyId: { in: deletePartyIds } }] } }),
     portalAccounts: await prisma.portalAccount.count({ where: { partyId: { in: deletePartyIds } } }),
-    pdfs: deleteDocuments.filter((document) => existsSync(join(storageRoot, document.storageKey))).length,
+    pdfs: [...deleteDocuments, ...deleteCommunicationAttachments].filter((document) => existsSync(join(storageRoot, document.storageKey))).length,
   };
-  return { context, caseClassifications, partyClassifications, deleteCaseIds, deletePartyIds, deleteDocuments, deleteCounts, review, summary: { cases: countBy(caseClassifications), parties: countBy(partyClassifications) } };
+  return { context, caseClassifications, partyClassifications, deleteCaseIds, deletePartyIds, deleteDocuments, deleteCommunicationIds, deleteCommunicationAttachments, deleteCounts, review, summary: { cases: countBy(caseClassifications), parties: countBy(partyClassifications) } };
 }
 
 async function execute(plan) {
@@ -152,6 +162,8 @@ async function execute(plan) {
     const caseFilter = { in: plan.deleteCaseIds };
     const partyFilter = { in: plan.deletePartyIds };
     await tx.activityEvent.deleteMany({ where: { tenantId: plan.context.tenant.id, OR: [{ caseId: caseFilter }, { partyId: partyFilter }] } });
+    await tx.communicationAttachment.deleteMany({ where: { communicationId: { in: plan.deleteCommunicationIds } } });
+    await tx.communicationEvent.deleteMany({ where: { id: { in: plan.deleteCommunicationIds } } });
     await tx.documentDelivery.deleteMany({ where: { caseId: caseFilter } });
     await tx.paymentAllocation.deleteMany({ where: { caseId: caseFilter } });
     await tx.enforcementAction.deleteMany({ where: { caseId: caseFilter } });
@@ -177,8 +189,9 @@ async function execute(plan) {
     await tx.party.deleteMany({ where: { id: partyFilter } });
   });
   let removedPdfs = 0;
-  for (const document of plan.deleteDocuments) {
-    const references = await prisma.caseDocument.count({ where: { storageKey: document.storageKey } });
+  for (const document of [...plan.deleteDocuments, ...plan.deleteCommunicationAttachments]) {
+    const references = (await prisma.caseDocument.count({ where: { storageKey: document.storageKey } }))
+      + (await prisma.communicationAttachment.count({ where: { storageKey: document.storageKey } }));
     const path = join(storageRoot, document.storageKey);
     if (!references && existsSync(path)) {
       await unlink(path);

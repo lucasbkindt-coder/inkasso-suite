@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import {
   MembershipStatus,
   ActivityEventType,
@@ -286,12 +286,35 @@ export class CasesService {
 
   async assign(id: string, membershipId: string | null) {
     const tenantId = await this.tenantContext.getTenantId();
-    this.staffAuth.requirePermission(this.tenantContext.getStaffContext(), "case:assign");
+    const actor = this.tenantContext.getStaffContext();
+    this.staffAuth.requirePermission(actor, "case:assign");
     const existing = await this.getCase(id, tenantId, true);
     if (membershipId) await this.assertOwner(membershipId, tenantId);
+    const isManager = await this.isAssignmentManager(actor.tenantMembershipId, tenantId);
+    if (!existing.assignedMembershipId) {
+      if (!isManager && membershipId !== actor.tenantMembershipId) {
+        throw new ForbiddenException("Nicht zugewiesene Akten können nur selbst übernommen werden.");
+      }
+      if (!membershipId) {
+        if (!isManager) throw new ForbiddenException("Eine Akte kann nur selbst übernommen werden.");
+        return existing;
+      }
+      const assigned = await this.prisma.$transaction(async (tx) => {
+        const updated = await tx.case.updateMany({ where: { id, tenantId, assignedMembershipId: null }, data: { assignedMembershipId: membershipId } });
+        if (updated.count !== 1) throw new ConflictException("Die Akte wurde inzwischen bereits übernommen.");
+        await this.activity.recordStaffEvent(tx, actor.tenantMembershipId, {
+          tenantId, caseId: id, partyId: existing.debtorPartyId, eventType: ActivityEventType.CASE_ASSIGNEE_CHANGED,
+          description: "Sachbearbeitung wurde geändert.", metadata: { previousMembershipId: null, newMembershipId: membershipId }, sourceEntityType: "Case", sourceEntityId: id,
+        });
+        return true;
+      });
+      if (assigned) return this.getCase(id, tenantId, true);
+    }
+    if (!isManager) throw new ForbiddenException("Bereits zugewiesene Akten dürfen nur durch Teamleitung oder Administration umverteilt werden.");
+    if (existing.assignedMembershipId === membershipId) return existing;
     await this.prisma.$transaction(async (tx) => {
       await tx.case.update({ where: { id }, data: { assignedMembershipId: membershipId } });
-      await this.activity.recordStaffEvent(tx, this.tenantContext.getStaffContext().tenantMembershipId, {
+      await this.activity.recordStaffEvent(tx, actor.tenantMembershipId, {
         tenantId,
         caseId: id,
         partyId: existing.debtorPartyId,
@@ -303,6 +326,18 @@ export class CasesService {
       });
     });
     return this.getCase(id, tenantId, true);
+  }
+
+  private async isAssignmentManager(membershipId: string, tenantId: string) {
+    const value = await this.prisma.tenantMembership.findFirst({
+      where: {
+        id: membershipId,
+        tenantId,
+        roleAssignments: { some: { role: { kind: "SYSTEM", name: { in: ["Teamleiter", "Administrator", "Tenant Owner"] } } } },
+      },
+      select: { id: true },
+    });
+    return Boolean(value);
   }
 
   async availableStatusTransitions(id: string) {
