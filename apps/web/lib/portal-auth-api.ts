@@ -2,6 +2,8 @@ export type PortalSession = {
   authenticated: true;
   portalType: "CLIENT" | "DEBTOR";
   partyId: string;
+  clientContactId?: string;
+  clientContactName?: string;
 };
 
 type PortalAuthError = { message?: string | string[] };

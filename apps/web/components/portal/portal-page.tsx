@@ -54,7 +54,7 @@ export function PortalLayout({
 }) {
   const pathname = usePathname();
   const { ready, token } = usePreviewToken();
-  const [authenticated, setAuthenticated] = React.useState(false);
+  const [session, setSession] = React.useState<import("@/lib/portal-auth-api").PortalSession | null>(null);
   const [returnUrl, setReturnUrl] = React.useState("/");
   React.useEffect(() => {
     if (!ready) return;
@@ -62,7 +62,7 @@ export function PortalLayout({
       void request("/portal/context", token)
         .then((value) => setReturnUrl(String(value.returnUrl)))
         .catch(() => undefined);
-    else void portalAuthApi.getPortalSession().then(() => setAuthenticated(true)).catch(() => setAuthenticated(false));
+    else void portalAuthApi.getPortalSession().then(setSession).catch(() => setSession(null));
   }, [ready, token]);
   const back = type === "Mandantenportal" ? "Ansicht als Mandant" : "Ansicht als Schuldner";
   return (
@@ -90,7 +90,7 @@ export function PortalLayout({
             <ArrowLeft className="size-4" /> Zurück zu payveo
           </Link>
         </div>
-      </div> : authenticated ? <AuthenticatedHeader /> : null}
+      </div> : session ? <AuthenticatedHeader session={session} /> : null}
       {type === "Mandantenportal" ? (
         <ClientPortalNavigation pathname={pathname} token={token} />
       ) : null}
@@ -337,8 +337,8 @@ function InstallmentSection({caseId,openAmount,previewToken,requests}:{caseId:st
  const check=(e:React.FormEvent)=>{e.preventDefault();if(!/^\d+(\.\d{1,2})?$/.test(amount)||Number(amount)<=0){setError("Bitte geben Sie eine monatliche Rate größer als 0 ein.");return}if(!start){setError("Bitte geben Sie einen Starttermin an.");return}if(count&&!/^[1-9]\d*$/.test(count)){setError("Die Ratenanzahl muss eine positive ganze Zahl sein.");return}setError("");setReview(true)};
  return <section className="mt-8 rounded-xl border bg-card p-5"><h2 className="text-xl font-semibold">Ratenzahlung</h2>{plan?<div className="mt-3 rounded-lg bg-muted/40 p-3 text-sm"><strong>Ratenplan: {installmentPlanStatusLabels[plan.status]}</strong><p>Vereinbarter Betrag: {formatCurrency(plan.initialOpenAmount,"EUR")} · Rate: {formatCurrency(plan.plannedInstallmentAmount,"EUR")}</p>{plan.nextItem?<p>Nächste Rate: {formatCurrency(plan.nextItem.remainingAmount,"EUR")} am {formatDate(plan.nextItem.dueDate)} · {installmentPlanItemStatusLabels[plan.nextItem.status]}</p>:null}<p className="mt-2 text-muted-foreground">Weitere Zinsen oder Kosten können die aktuelle offene Gesamtforderung verändern.</p></div>:null}{items.map(item=><div className="mt-3 rounded-lg bg-muted/40 p-3 text-sm" key={item.id}><strong>{installmentRequestStatusLabels[item.status]}</strong><p>Gewünschte Rate: {formatCurrency(item.requestedMonthlyAmount,"EUR")} · Start: {formatDate(item.preferredStartDate)}</p></div>)}{!plan&&active?null:!plan&&!open?<><button className="mt-4 rounded-lg bg-primary px-3 py-2 text-primary-foreground" onClick={()=>setOpen(true)} type="button">Ratenzahlung anfragen</button>{previewToken?<p className="mt-2 text-sm text-muted-foreground">Im Vorschaumodus können keine Ratenzahlungsanfragen abgesendet werden.</p>:null}</>:!plan&&review?<div className="mt-4 space-y-3 rounded-lg border p-4"><h3 className="font-semibold">Zusammenfassung Ihrer Anfrage</h3><p>Aktuell offener Betrag: {formatCurrency(openAmount,"EUR")}</p><button className="rounded-lg bg-primary px-3 py-2 text-primary-foreground disabled:opacity-50" disabled={pending||Boolean(previewToken)} onClick={()=>void submit()} type="button">{pending?"Wird gesendet …":"Anfrage verbindlich absenden"}</button></div>:!plan?<form className="mt-4 space-y-3" onSubmit={check}><label className="block text-sm">Gewünschte monatliche Rate<input className="mt-1 w-full rounded border p-2" onChange={e=>setAmount(e.target.value)} required value={amount}/></label><label className="block text-sm">Gewünschter Starttermin<input className="mt-1 w-full rounded border p-2" onChange={e=>setStart(e.target.value)} required type="date" value={start}/></label><button className="rounded-lg bg-primary px-3 py-2 text-primary-foreground" type="submit">Anfrage prüfen</button></form>:null}</section>
 }
-function AuthenticatedHeader() {
+function AuthenticatedHeader({ session }: { session: import("@/lib/portal-auth-api").PortalSession }) {
   const [pending, setPending] = React.useState(false);
   const logout = async () => { setPending(true); try { await portalAuthApi.logoutPortal(); window.location.assign("/portal/login"); } catch { setPending(false); } };
-  return <div className="border-b bg-muted/30"><div className="mx-auto flex max-w-6xl items-center justify-between p-3 text-sm"><span>Angemeldeter Portalzugang</span><button className="font-medium text-primary hover:underline disabled:opacity-60" disabled={pending} onClick={() => void logout()} type="button">Abmelden</button></div></div>;
+  return <div className="border-b bg-muted/30"><div className="mx-auto flex max-w-6xl items-center justify-between p-3 text-sm"><span>{session.portalType === "CLIENT" && session.clientContactName ? `Angemeldet als ${session.clientContactName}` : "Angemeldeter Portalzugang"}</span><button className="font-medium text-primary hover:underline disabled:opacity-60" disabled={pending} onClick={() => void logout()} type="button">Abmelden</button></div></div>;
 }

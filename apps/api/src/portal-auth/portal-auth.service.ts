@@ -31,10 +31,13 @@ export type PortalAuthContext = {
   portalAccountId: string;
   portalType: PortalAccountType;
   partyId: string;
+  clientContactId?: string;
+  clientContactName?: string;
 };
 
 type IssueActivationOptions = {
   invalidateExisting?: boolean;
+  actorMembershipId?: string;
 };
 
 @Injectable()
@@ -48,9 +51,12 @@ export class PortalAuthService {
     partyId: string,
     portalType: PortalAccountType,
   ) {
+    if (portalType === PortalAccountType.CLIENT) {
+      throw new BadRequestException("Neue Mandantenportalzugänge benötigen einen Ansprechpartner.");
+    }
     await this.assertEligibleParty(tenantId, partyId, portalType);
-    const existing = await this.prisma.portalAccount.findUnique({
-      where: { tenantId_partyId_portalType: { tenantId, partyId, portalType } },
+    const existing = await this.prisma.portalAccount.findFirst({
+      where: { tenantId, partyId, portalType, clientContactId: null },
     });
     if (existing) return { account: existing, created: false };
 
@@ -70,13 +76,41 @@ export class PortalAuthService {
         return { account, created: true };
       } catch (error) {
         if (!this.isUniqueConstraint(error)) throw error;
-        const concurrentAccount = await this.prisma.portalAccount.findUnique({
-          where: { tenantId_partyId_portalType: { tenantId, partyId, portalType } },
+        const concurrentAccount = await this.prisma.portalAccount.findFirst({
+          where: { tenantId, partyId, portalType, clientContactId: null },
         });
         if (concurrentAccount) return { account: concurrentAccount, created: false };
       }
     }
     throw new ConflictException("Portalzugang konnte nicht erzeugt werden.");
+  }
+
+  async createClientAccountForContact(tenantId: string, partyId: string, clientContactId: string) {
+    const contact = await this.prisma.clientContact.findFirst({
+      where: { id: clientContactId, tenantId, partyId, isActive: true, party: { deletedAt: null, roles: { some: { role: PartyRoleType.CLIENT, deletedAt: null } } } },
+      select: { id: true, email: true },
+    });
+    if (!contact) throw new BadRequestException("Der Ansprechpartner ist nicht für einen Mandantenportalzugang geeignet.");
+    if (!contact.email) throw new BadRequestException("Für den Portalzugang muss eine E-Mail-Adresse hinterlegt sein.");
+    try {
+      const result = await this.prisma.$transaction(async (tx) => {
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`client-portal-account:${clientContactId}`}))`;
+        const existing = await tx.portalAccount.findUnique({ where: { clientContactId } });
+        if (existing) return { account: existing, created: false };
+        const created = await tx.portalAccount.create({ data: {
+          tenantId, partyId, clientContactId, portalType: PortalAccountType.CLIENT,
+          status: PortalAccountStatus.PENDING_ACTIVATION, loginIdentifier: await this.createLoginIdentifier(),
+        } });
+        await this.activity.recordSystemEvent(tx, { tenantId, partyId, eventType: ActivityEventType.PORTAL_ACCOUNT_CREATED, description: "Mandantenportalzugang wurde angelegt.", metadata: { portalType: PortalAccountType.CLIENT, clientContactId }, sourceEntityType: "PortalAccount", sourceEntityId: created.id });
+        return { account: created, created: true };
+      });
+      return result;
+    } catch (error) {
+      if (!this.isUniqueConstraint(error)) throw error;
+      const account = await this.prisma.portalAccount.findUnique({ where: { clientContactId } });
+      if (account) return { account, created: false };
+      throw error;
+    }
   }
 
   async issueActivation(
@@ -110,7 +144,9 @@ export class PortalAuthService {
           expiresAt,
         },
       });
-      await this.activity.recordSystemEvent(tx, { tenantId, partyId: account.partyId, eventType: ActivityEventType.PORTAL_ACTIVATION_ISSUED, description: "Portalaktivierung wurde ausgestellt.", metadata: { portalAccountId: account.id }, sourceEntityType: "PortalActivation", sourceEntityId: created.id });
+      const event = { tenantId, partyId: account.partyId, eventType: ActivityEventType.PORTAL_ACTIVATION_ISSUED, description: "Portalaktivierung wurde ausgestellt.", metadata: { portalAccountId: account.id }, sourceEntityType: "PortalActivation", sourceEntityId: created.id };
+      if (options.actorMembershipId) await this.activity.recordStaffEvent(tx, options.actorMembershipId, event);
+      else await this.activity.recordSystemEvent(tx, event);
       return created;
     });
 
@@ -182,6 +218,10 @@ export class PortalAuthService {
         where: { id: account.id },
         data: { status: PortalAccountStatus.ACTIVE, passwordHash, activatedAt: now },
       });
+      await this.activity.recordPortalEvent(tx, activated.id, {
+        tenantId: activated.tenantId, partyId: activated.partyId, eventType: ActivityEventType.PORTAL_ACCOUNT_ACTIVATED,
+        description: "Portalzugang wurde aktiviert.", sourceEntityType: "PortalAccount", sourceEntityId: activated.id,
+      });
       return { id: activated.id, portalType: activated.portalType, status: activated.status };
     });
   }
@@ -235,9 +275,12 @@ export class PortalAuthService {
         expiresAt: { gt: now },
         portalAccount: { status: PortalAccountStatus.ACTIVE },
       },
-      include: { portalAccount: true },
+      include: { portalAccount: { include: { clientContact: { select: { firstName: true, lastName: true, isActive: true } } } }, },
     });
     if (!session || (expectedType && session.portalAccount.portalType !== expectedType)) {
+      throw new UnauthorizedException("Portal-Anmeldung erforderlich.");
+    }
+    if (session.portalAccount.portalType === PortalAccountType.CLIENT && (!session.portalAccount.clientContactId || !session.portalAccount.clientContact?.isActive)) {
       throw new UnauthorizedException("Portal-Anmeldung erforderlich.");
     }
     await this.prisma.portalSession.update({ where: { id: session.id }, data: { lastSeenAt: now } });
@@ -246,7 +289,39 @@ export class PortalAuthService {
       portalAccountId: session.portalAccount.id,
       portalType: session.portalAccount.portalType,
       partyId: session.portalAccount.partyId,
+      clientContactId: session.portalAccount.clientContactId ?? undefined,
+      clientContactName: session.portalAccount.clientContact ? `${session.portalAccount.clientContact.firstName} ${session.portalAccount.clientContact.lastName}` : undefined,
     } satisfies PortalAuthContext;
+  }
+
+  async suspendAccount(tenantId: string, portalAccountId: string, actorMembershipId?: string) {
+    return this.prisma.$transaction((tx) => this.suspendAccountInTransaction(tx, tenantId, portalAccountId, "Portalzugang wurde gesperrt.", actorMembershipId));
+  }
+
+  async suspendAccountInTransaction(tx: Prisma.TransactionClient, tenantId: string, portalAccountId: string, reason = "Portalzugang wurde gesperrt.", actorMembershipId?: string) {
+    const account = await tx.portalAccount.findFirst({ where: { id: portalAccountId, tenantId }, select: { id: true, partyId: true, status: true, loginIdentifier: true, activatedAt: true, lastLoginAt: true } });
+    if (!account) throw new NotFoundException("Portalzugang wurde nicht gefunden.");
+    if (account.status === PortalAccountStatus.LOCKED) return account;
+    const updated = await tx.portalAccount.update({ where: { id: account.id }, data: { status: PortalAccountStatus.LOCKED } });
+    await tx.portalSession.updateMany({ where: { portalAccountId: account.id, revokedAt: null }, data: { revokedAt: new Date() } });
+    const event = { tenantId, partyId: account.partyId, eventType: ActivityEventType.PORTAL_ACCOUNT_SUSPENDED, description: reason, sourceEntityType: "PortalAccount", sourceEntityId: account.id };
+    if (actorMembershipId) await this.activity.recordStaffEvent(tx, actorMembershipId, event);
+    else await this.activity.recordSystemEvent(tx, event);
+    return updated;
+  }
+
+  async reactivateAccount(tenantId: string, portalAccountId: string, actorMembershipId?: string) {
+    return this.prisma.$transaction(async (tx) => {
+      const account = await tx.portalAccount.findFirst({ where: { id: portalAccountId, tenantId }, select: { id: true, partyId: true, status: true, passwordHash: true } });
+      if (!account) throw new NotFoundException("Portalzugang wurde nicht gefunden.");
+      if (account.status !== PortalAccountStatus.LOCKED) throw new ConflictException("Dieser Portalzugang ist nicht gesperrt.");
+      const status = account.passwordHash ? PortalAccountStatus.ACTIVE : PortalAccountStatus.PENDING_ACTIVATION;
+      const updated = await tx.portalAccount.update({ where: { id: account.id }, data: { status } });
+      const event = { tenantId, partyId: account.partyId, eventType: ActivityEventType.PORTAL_ACCOUNT_REACTIVATED, description: "Portalzugang wurde freigegeben.", sourceEntityType: "PortalAccount", sourceEntityId: account.id };
+      if (actorMembershipId) await this.activity.recordStaffEvent(tx, actorMembershipId, event);
+      else await this.activity.recordSystemEvent(tx, event);
+      return updated;
+    });
   }
 
   sessionCookieOptions(expiresAt?: Date) {

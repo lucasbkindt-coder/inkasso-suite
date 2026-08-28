@@ -108,7 +108,7 @@ export class PortalService {
 
   async context(input: AccessInput) {
     const context = await this.anyContext(input);
-    return { portalType: context.portalType, mode: context.mode, returnUrl: context.returnUrl };
+    return { portalType: context.portalType, mode: context.mode, returnUrl: context.returnUrl, clientContactName: context.clientContactName };
   }
 
   async downloadDocument(id: string, input: AccessInput) {

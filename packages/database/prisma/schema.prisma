@@ -339,6 +339,12 @@ enum ActivityEventType {
   COMMUNICATION_ATTACHMENT_ADDED
   PORTAL_ACCOUNT_CREATED
   PORTAL_ACTIVATION_ISSUED
+  PORTAL_ACCOUNT_ACTIVATED
+  PORTAL_ACCOUNT_SUSPENDED
+  PORTAL_ACCOUNT_REACTIVATED
+  CLIENT_CONTACT_CREATED
+  CLIENT_CONTACT_UPDATED
+  CLIENT_CONTACT_PRIMARY_CHANGED
   TITLE_CREATED
   TITLE_ACTIVATED
   TITLE_VOIDED
@@ -480,6 +486,7 @@ model Tenant {
   tasks              CaseTask[]
   clientSubmissions ClientSubmission[]
   portalAccounts     PortalAccount[]
+  clientContacts     ClientContact[]
   installmentRequests InstallmentRequest[]
   installmentPlans    InstallmentPlan[]
   installmentPlanItems InstallmentPlanItem[]
@@ -916,6 +923,7 @@ model Party {
   roles       PartyRole[]
   addresses   Address[]
   contacts    Contact[]
+  clientContacts ClientContact[]
   clientCases Case[]      @relation("CaseClient")
   debtorCases Case[]      @relation("CaseDebtor")
   clientSubmissions ClientSubmission[]
@@ -1017,6 +1025,7 @@ model PortalAccount {
   id              String              @id @default(uuid()) @db.Uuid
   tenantId        String              @db.Uuid
   partyId         String              @db.Uuid
+  clientContactId String?             @unique @db.Uuid
   portalType      PortalAccountType
   status          PortalAccountStatus @default(PENDING_ACTIVATION)
   loginIdentifier String              @unique
@@ -1028,13 +1037,43 @@ model PortalAccount {
 
   tenant      Tenant             @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   party       Party              @relation(fields: [partyId], references: [id], onDelete: Restrict)
+  clientContact ClientContact?   @relation(fields: [clientContactId], references: [id], onDelete: Restrict)
   activations PortalActivation[]
   sessions    PortalSession[]
   activityEvents ActivityEvent[]
 
-  @@unique([tenantId, partyId, portalType])
   @@index([tenantId, portalType, status])
   @@index([partyId, portalType])
+  @@index([tenantId, partyId, portalType])
+}
+
+model ClientContact {
+  id                    String            @id @default(uuid()) @db.Uuid
+  tenantId              String            @db.Uuid
+  partyId               String            @db.Uuid
+  firstName             String
+  lastName              String
+  salutation            String?
+  title                 String?
+  position              String?
+  email                 String?
+  phone                 String?
+  mobile                String?
+  isPrimary             Boolean           @default(false)
+  isActive              Boolean           @default(true)
+  notes                 String?
+  createdByMembershipId String?           @db.Uuid
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @updatedAt
+
+  tenant              Tenant            @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  party               Party             @relation(fields: [partyId], references: [id], onDelete: Restrict)
+  createdByMembership TenantMembership? @relation("ClientContactCreatedBy", fields: [createdByMembershipId], references: [id], onDelete: Restrict)
+  portalAccount       PortalAccount?
+
+  @@index([tenantId, partyId, isActive, isPrimary])
+  @@index([partyId, isActive])
+  @@index([createdByMembershipId])
 }
 
 model PortalActivation {
@@ -1284,6 +1323,7 @@ model TenantMembership {
   createdEnforcementTitles EnforcementTitle[] @relation("EnforcementTitleCreatedBy")
   createdEnforcementActions EnforcementAction[] @relation("EnforcementActionCreatedBy")
   createdCommunications CommunicationEvent[] @relation("CommunicationCreatedBy")
+  createdClientContacts ClientContact[] @relation("ClientContactCreatedBy")
 
   @@unique([tenantId, userId])
   @@index([userId, deletedAt])

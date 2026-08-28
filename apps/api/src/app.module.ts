@@ -21,6 +21,7 @@ import { StaffAuthModule } from "./staff-auth/staff-auth.module";
 import { ActivityModule } from "./activity/activity.module";
 import { EnforcementModule } from "./enforcement/enforcement.module";
 import { HealthModule } from "./health/health.module";
+import { ClientContactsModule } from "./client-contacts/client-contacts.module";
 
 @Module({
   imports: [
@@ -31,6 +32,7 @@ import { HealthModule } from "./health/health.module";
     StaffAuthModule,
     DebtorsModule,
     PartiesModule,
+    ClientContactsModule,
     CasesModule,
     LedgerModule,
     LegalReferencesModule,

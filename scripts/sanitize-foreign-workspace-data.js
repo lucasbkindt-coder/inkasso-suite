@@ -72,7 +72,7 @@ async function loadContext() {
 async function dryRun() {
   const context = await loadContext();
   const tenantId = context.tenant.id;
-  const [events, cases, parties, ledgerEntries, documents, tasks, installmentRequests, installmentPlans, titles, actions, clientSubmissions, portalAccounts, communications] = await Promise.all([
+  const [events, cases, parties, ledgerEntries, documents, tasks, installmentRequests, installmentPlans, titles, actions, clientSubmissions, portalAccounts, clientContacts, communications] = await Promise.all([
     prisma.activityEvent.findMany({ where: { tenantId }, select: { eventType: true, sourceEntityType: true, sourceEntityId: true, caseId: true, partyId: true, actorMembershipId: true } }),
     prisma.case.findMany({ where: { tenantId }, select: { id: true, clientPartyId: true, debtorPartyId: true } }),
     prisma.party.findMany({ where: { tenantId }, select: { id: true, type: true } }),
@@ -85,6 +85,7 @@ async function dryRun() {
     prisma.enforcementAction.findMany({ where: { tenantId }, select: { id: true, caseId: true, createdByMembershipId: true } }),
     prisma.clientSubmission.findMany({ where: { tenantId }, select: { id: true, clientPartyId: true, acceptedCaseId: true, reviewedByMembershipId: true } }),
     prisma.portalAccount.findMany({ where: { tenantId }, select: { id: true, partyId: true } }),
+    prisma.clientContact.findMany({ where: { tenantId }, select: { id: true, partyId: true } }),
     prisma.communicationEvent.findMany({ where: { tenantId }, select: { id: true, caseId: true, partyId: true } }),
   ]);
 
@@ -151,6 +152,7 @@ async function dryRun() {
     enforcementActions: await prisma.enforcementAction.count({ where: { caseId: { in: deleteCaseIds } } }),
     activities: await prisma.activityEvent.count({ where: { tenantId, OR: [{ caseId: { in: deleteCaseIds } }, { partyId: { in: deletePartyIds } }] } }),
     portalAccounts: await prisma.portalAccount.count({ where: { partyId: { in: deletePartyIds } } }),
+    clientContacts: clientContacts.filter((contact) => deletePartyIds.includes(contact.partyId)).length,
     pdfs: [...deleteDocuments, ...deleteCommunicationAttachments].filter((document) => existsSync(join(storageRoot, document.storageKey))).length,
   };
   return { context, caseClassifications, partyClassifications, deleteCaseIds, deletePartyIds, deleteDocuments, deleteCommunicationIds, deleteCommunicationAttachments, deleteCounts, review, summary: { cases: countBy(caseClassifications), parties: countBy(partyClassifications) } };
@@ -181,6 +183,7 @@ async function execute(plan) {
     await tx.portalSession.deleteMany({ where: { portalAccount: { partyId: partyFilter } } });
     await tx.portalActivation.deleteMany({ where: { portalAccount: { partyId: partyFilter } } });
     await tx.portalAccount.deleteMany({ where: { partyId: partyFilter } });
+    await tx.clientContact.deleteMany({ where: { partyId: partyFilter } });
     await tx.address.deleteMany({ where: { partyId: partyFilter } });
     await tx.contact.deleteMany({ where: { partyId: partyFilter } });
     await tx.partyRole.deleteMany({ where: { partyId: partyFilter } });

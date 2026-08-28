@@ -11,6 +11,7 @@ import { ActivityList } from "@/components/activity/activity-list";
 import { partyApi } from "@/components/parties/party-api";
 import { caseApi } from "@/components/cases/case-api";
 import { CommunicationPanel } from "@/components/communications/communication-panel";
+import { ClientContacts } from "@/components/parties/client-contacts";
 const API = "/api";
 type Party = {
   id: string;
@@ -151,6 +152,7 @@ export default function PartyDetailPage() {
           />
         </Section>
       </div>
+      {party.roles.some((role) => role.role === "CLIENT") ? <ClientContacts clientId={party.id} /> : null}
       {party.roles.some((role) => role.role === "DEBTOR") ? <CommunicationPanel cases={cases} partyId={party.id} /> : null}
       <ActivityList load={(page) => partyApi.activities(id, page)} />
       <PartyDialog

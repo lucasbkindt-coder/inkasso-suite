@@ -34,6 +34,10 @@ export type PartyDetail = PartyInput & {
   updatedAt: string;
   deletedAt: string | null;
 };
+export type PortalAccountSummary = { id: string; status: "PENDING_ACTIVATION" | "ACTIVE" | "LOCKED"; loginIdentifier: string; activatedAt: string | null; lastLoginAt: string | null };
+export type ClientContact = { id: string; firstName: string; lastName: string; salutation: string | null; title: string | null; position: string | null; email: string | null; phone: string | null; mobile: string | null; isPrimary: boolean; isActive: boolean; notes: string | null; portalAccount: PortalAccountSummary | null };
+export type ClientContactInput = { firstName: string; lastName: string; salutation?: string; title?: string; position?: string; email?: string; phone?: string; mobile?: string; notes?: string; isPrimary: boolean; isActive: boolean };
+export type PortalActivation = { loginIdentifier: string; activationCode: string; activationUrl: string; expiresAt: string };
 const API = "/api";
 async function request<T>(path: string, init?: RequestInit) {
   const response = await fetch(`${API}${path}`, {
@@ -58,4 +62,13 @@ export const partyApi = {
     request<PartyDetail>(`/parties/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
   activities: (id: string, page = 1) =>
     request<{ items: import("@/components/activity/activity-list").ActivityItem[]; page: number; totalPages: number }>(`/parties/${id}/activities?page=${page}&limit=25`),
+};
+export const clientContactsApi = {
+  list: (clientId: string) => request<ClientContact[]>(`/parties/${clientId}/contacts`),
+  create: (clientId: string, data: ClientContactInput) => request<ClientContact>(`/parties/${clientId}/contacts`, { method: "POST", body: JSON.stringify(data) }),
+  update: (clientId: string, contactId: string, data: ClientContactInput) => request<ClientContact>(`/parties/${clientId}/contacts/${contactId}`, { method: "PATCH", body: JSON.stringify(data) }),
+  createPortalAccount: (clientId: string, contactId: string) => request<{ account: PortalAccountSummary; activation: PortalActivation }>(`/parties/${clientId}/contacts/${contactId}/portal-account`, { method: "POST" }),
+  reissue: (id: string) => request<PortalActivation>(`/portal-accounts/${id}/activation/reissue`, { method: "POST" }),
+  suspend: (id: string) => request<PortalAccountSummary>(`/portal-accounts/${id}/suspend`, { method: "POST" }),
+  reactivate: (id: string) => request<PortalAccountSummary>(`/portal-accounts/${id}/reactivate`, { method: "POST" }),
 };

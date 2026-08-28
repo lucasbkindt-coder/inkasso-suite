@@ -52,6 +52,8 @@ export class PortalAuthController {
       authenticated: true,
       portalType: context.portalType,
       partyId: context.partyId,
+      clientContactId: context.clientContactId,
+      clientContactName: context.clientContactName,
     };
   }
 }
