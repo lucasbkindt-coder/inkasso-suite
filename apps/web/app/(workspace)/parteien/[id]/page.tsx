@@ -20,6 +20,7 @@ type Party = {
   createdAt: string;
   updatedAt: string;
   deletedAt: string | null;
+  processingRestrictedAt: string | null;
   person: {
     salutation: string | null;
     title: string | null;
@@ -101,6 +102,7 @@ export default function PartyDetailPage() {
             {party.type === "PERSON" ? "Person" : "Unternehmen"} ·{" "}
             {party.deletedAt ? "Gelöscht" : "Aktiv"}
           </p>
+          {party.processingRestrictedAt ? <span className="rounded-full border border-amber-500/40 bg-amber-500/10 px-3 py-1 text-xs font-medium text-amber-700 dark:text-amber-300">Verarbeitung eingeschränkt</span> : null}
           <Button onClick={() => setEditOpen(true)} variant="outline">
             <Pencil className="size-4" /> Bearbeiten
           </Button>

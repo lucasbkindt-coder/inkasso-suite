@@ -4,6 +4,7 @@ import {
   LayoutDashboard,
   ListTodo,
   Settings,
+  ShieldCheck,
   Users,
   UsersRound,
 } from "lucide-react";
@@ -35,6 +36,7 @@ export const navigationGroups = [
       { href: "/mandanten", label: "Mandanten", icon: Building2 },
       { href: "/benutzer", label: "Benutzer", icon: UsersRound },
       { href: "/einstellungen", label: "Einstellungen", icon: Settings },
+      { href: "/datenschutz", label: "Datenschutz", icon: ShieldCheck },
     ],
   },
 ] as const;
@@ -52,6 +54,7 @@ export const pageTitles: Record<string, string> = {
   "/dokumente": "Dokumente",
   "/benutzer": "Benutzer",
   "/einstellungen": "Einstellungen",
+  "/datenschutz": "Datenschutz",
 };
 
 export function isNavigationItemActive(pathname: string, href: string) {

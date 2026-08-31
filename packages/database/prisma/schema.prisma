@@ -54,6 +54,51 @@ enum PortalAccountStatus {
   DISABLED
 }
 
+enum DataSubjectRequestType {
+  ACCESS
+  ERASURE
+  RECTIFICATION
+  RESTRICTION
+}
+
+enum DataSubjectRequestStatus {
+  RECEIVED
+  IDENTITY_CHECK
+  IN_REVIEW
+  WAITING_INFORMATION
+  APPROVED
+  PARTIALLY_APPROVED
+  REJECTED
+  COMPLETED
+  CANCELLED
+}
+
+enum DataSubjectDataAction {
+  DELETE
+  RESTRICT
+  ANONYMIZE
+  RETAIN
+  REVIEW
+}
+
+enum DataSubjectDataCategory {
+  MASTER_DATA
+  ADDRESSES
+  CONTACT_DATA
+  CASES
+  CLAIMS
+  LEDGER
+  PAYMENTS
+  TASKS
+  DOCUMENTS
+  COMMUNICATIONS
+  PORTAL
+  INSTALLMENTS
+  ENFORCEMENT
+  ACTIVITY
+  CLIENT_CONTACT
+}
+
 enum PartyRoleType {
   CLIENT
   DEBTOR
@@ -345,6 +390,15 @@ enum ActivityEventType {
   CLIENT_CONTACT_CREATED
   CLIENT_CONTACT_UPDATED
   CLIENT_CONTACT_PRIMARY_CHANGED
+  DATA_SUBJECT_REQUEST_CREATED
+  DATA_SUBJECT_REQUEST_ASSIGNED
+  DATA_SUBJECT_IDENTITY_VERIFIED
+  DATA_SUBJECT_REQUEST_STATUS_CHANGED
+  DATA_SUBJECT_ACCESS_EXPORT_GENERATED
+  DATA_SUBJECT_REVIEW_DECIDED
+  DATA_SUBJECT_RESTRICTION_APPLIED
+  DATA_SUBJECT_RESTRICTION_REMOVED
+  DATA_SUBJECT_REQUEST_COMPLETED
   TITLE_CREATED
   TITLE_ACTIVATED
   TITLE_VOIDED
@@ -487,6 +541,9 @@ model Tenant {
   clientSubmissions ClientSubmission[]
   portalAccounts     PortalAccount[]
   clientContacts     ClientContact[]
+  dataSubjectRequests DataSubjectRequest[]
+  dataSubjectAccessExports DataSubjectAccessExport[]
+  dataSubjectDataReviews DataSubjectDataReview[]
   installmentRequests InstallmentRequest[]
   installmentPlans    InstallmentPlan[]
   installmentPlanItems InstallmentPlanItem[]
@@ -924,6 +981,9 @@ model Party {
   addresses   Address[]
   contacts    Contact[]
   clientContacts ClientContact[]
+  dataSubjectRequests DataSubjectRequest[] @relation("DataSubjectParty")
+  processingRestrictedAt DateTime?
+  processingRestrictionReason String?
   clientCases Case[]      @relation("CaseClient")
   debtorCases Case[]      @relation("CaseDebtor")
   clientSubmissions ClientSubmission[]
@@ -1070,10 +1130,82 @@ model ClientContact {
   party               Party             @relation(fields: [partyId], references: [id], onDelete: Restrict)
   createdByMembership TenantMembership? @relation("ClientContactCreatedBy", fields: [createdByMembershipId], references: [id], onDelete: Restrict)
   portalAccount       PortalAccount?
+  dataSubjectRequests DataSubjectRequest[]
 
   @@index([tenantId, partyId, isActive, isPrimary])
   @@index([partyId, isActive])
   @@index([createdByMembershipId])
+}
+
+model DataSubjectRequest {
+  id String @id @default(uuid()) @db.Uuid
+  tenantId String @db.Uuid
+  subjectPartyId String? @db.Uuid
+  clientContactId String? @db.Uuid
+  requestType DataSubjectRequestType
+  status DataSubjectRequestStatus @default(RECEIVED)
+  receivedAt DateTime @default(now())
+  identityVerifiedAt DateTime?
+  identityVerifiedByMembershipId String? @db.Uuid
+  identityVerificationNote String?
+  dueAt DateTime?
+  assignedMembershipId String? @db.Uuid
+  description String?
+  notes String?
+  decision String?
+  decisionReason String?
+  completedAt DateTime?
+  createdByMembershipId String @db.Uuid
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  tenant Tenant @relation(fields:[tenantId], references:[id], onDelete:Restrict)
+  subjectParty Party? @relation("DataSubjectParty", fields:[subjectPartyId], references:[id], onDelete:Restrict)
+  clientContact ClientContact? @relation(fields:[clientContactId], references:[id], onDelete:Restrict)
+  identityVerifiedBy TenantMembership? @relation("DataSubjectIdentityVerifiedBy", fields:[identityVerifiedByMembershipId], references:[id], onDelete:Restrict)
+  assignedMembership TenantMembership? @relation("DataSubjectAssigned", fields:[assignedMembershipId], references:[id], onDelete:Restrict)
+  createdByMembership TenantMembership @relation("DataSubjectCreatedBy", fields:[createdByMembershipId], references:[id], onDelete:Restrict)
+  exports DataSubjectAccessExport[]
+  reviews DataSubjectDataReview[]
+  @@index([tenantId,status,dueAt])
+  @@index([tenantId,subjectPartyId])
+  @@index([tenantId,clientContactId])
+  @@index([assignedMembershipId])
+}
+
+model DataSubjectAccessExport {
+  id String @id @default(uuid()) @db.Uuid
+  tenantId String @db.Uuid
+  requestId String @db.Uuid
+  format String @default("JSON")
+  snapshot Json
+  sha256 String
+  generatedAt DateTime @default(now())
+  generatedByMembershipId String @db.Uuid
+  createdAt DateTime @default(now())
+  tenant Tenant @relation(fields:[tenantId], references:[id], onDelete:Restrict)
+  request DataSubjectRequest @relation(fields:[requestId], references:[id], onDelete:Restrict)
+  generatedByMembership TenantMembership @relation("DataSubjectExportGeneratedBy", fields:[generatedByMembershipId], references:[id], onDelete:Restrict)
+  @@index([tenantId,requestId,generatedAt])
+}
+
+model DataSubjectDataReview {
+  id String @id @default(uuid()) @db.Uuid
+  tenantId String @db.Uuid
+  requestId String @db.Uuid
+  category DataSubjectDataCategory
+  recordCount Int @default(0)
+  proposedAction DataSubjectDataAction @default(REVIEW)
+  finalAction DataSubjectDataAction?
+  reason String?
+  reviewedByMembershipId String? @db.Uuid
+  reviewedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  tenant Tenant @relation(fields:[tenantId], references:[id], onDelete:Restrict)
+  request DataSubjectRequest @relation(fields:[requestId], references:[id], onDelete:Restrict)
+  reviewedByMembership TenantMembership? @relation("DataSubjectReviewBy", fields:[reviewedByMembershipId], references:[id], onDelete:Restrict)
+  @@unique([requestId,category])
+  @@index([tenantId,requestId])
 }
 
 model PortalActivation {
@@ -1324,6 +1456,11 @@ model TenantMembership {
   createdEnforcementActions EnforcementAction[] @relation("EnforcementActionCreatedBy")
   createdCommunications CommunicationEvent[] @relation("CommunicationCreatedBy")
   createdClientContacts ClientContact[] @relation("ClientContactCreatedBy")
+  createdDataSubjectRequests DataSubjectRequest[] @relation("DataSubjectCreatedBy")
+  assignedDataSubjectRequests DataSubjectRequest[] @relation("DataSubjectAssigned")
+  identityVerifiedDataSubjectRequests DataSubjectRequest[] @relation("DataSubjectIdentityVerifiedBy")
+  generatedDataSubjectAccessExports DataSubjectAccessExport[] @relation("DataSubjectExportGeneratedBy")
+  reviewedDataSubjectReviews DataSubjectDataReview[] @relation("DataSubjectReviewBy")
 
   @@unique([tenantId, userId])
   @@index([userId, deletedAt])

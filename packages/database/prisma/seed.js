@@ -104,6 +104,9 @@ const standardPermissions = [
   ["report", "read", PermissionScope.TENANT, "Auswertungen anzeigen"],
   ["settings", "read", PermissionScope.TENANT, "Einstellungen anzeigen"],
   ["settings", "update", PermissionScope.TENANT, "Einstellungen verwalten"],
+  ["privacy", "read", PermissionScope.TENANT, "Datenschutzfälle anzeigen"],
+  ["privacy", "manage", PermissionScope.TENANT, "Datenschutzfälle bearbeiten"],
+  ["privacy", "export", PermissionScope.TENANT, "Betroffenenauskünfte exportieren"],
 ];
 
 const systemRoles = [

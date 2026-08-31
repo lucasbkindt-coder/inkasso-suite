@@ -26,6 +26,7 @@ const navigationPermissions: Record<string, string[]> = {
   "/teams": ["team:read"],
   "/rollen": ["role:read"],
   "/einstellungen": ["settings:read"],
+  "/datenschutz": ["privacy:read"],
 };
 
 function Sidebar({ onNavigate }: { onNavigate?: () => void }) {

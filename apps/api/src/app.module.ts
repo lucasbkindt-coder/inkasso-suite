@@ -22,6 +22,7 @@ import { ActivityModule } from "./activity/activity.module";
 import { EnforcementModule } from "./enforcement/enforcement.module";
 import { HealthModule } from "./health/health.module";
 import { ClientContactsModule } from "./client-contacts/client-contacts.module";
+import { DataSubjectRequestsModule } from "./data-subject-requests/data-subject-requests.module";
 
 @Module({
   imports: [
@@ -33,6 +34,7 @@ import { ClientContactsModule } from "./client-contacts/client-contacts.module";
     DebtorsModule,
     PartiesModule,
     ClientContactsModule,
+    DataSubjectRequestsModule,
     CasesModule,
     LedgerModule,
     LegalReferencesModule,
