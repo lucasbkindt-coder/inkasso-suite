@@ -26,6 +26,7 @@ import { DataSubjectRequestsModule } from "./data-subject-requests/data-subject-
 import { BankImportsModule } from "./bank-imports/bank-imports.module";
 import { AddressResearchModule } from "./address-research/address-research.module";
 import { CreditReportingModule } from "./credit-reporting/credit-reporting.module";
+import { ZohoDeskModule } from "./integrations/zoho-desk/zoho-desk.module";
 
 @Module({
   imports: [
@@ -41,6 +42,7 @@ import { CreditReportingModule } from "./credit-reporting/credit-reporting.modul
     BankImportsModule,
     AddressResearchModule,
     CreditReportingModule,
+    ZohoDeskModule,
     CasesModule,
     LedgerModule,
     LegalReferencesModule,

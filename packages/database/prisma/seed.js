@@ -114,6 +114,8 @@ const standardPermissions = [
   ["credit-report", "read", PermissionScope.TENANT, "Auskunfteiprüfungen anzeigen"],
   ["credit-report", "manage", PermissionScope.TENANT, "Auskunfteiprüfungen bearbeiten"],
   ["credit-report", "approve", PermissionScope.TENANT, "Auskunfteiprüfungen freigeben"],
+  ["integration", "read", PermissionScope.TENANT, "Integrationen anzeigen"],
+  ["integration", "manage", PermissionScope.TENANT, "Integrationen verwalten"],
 ];
 
 const systemRoles = [
@@ -184,6 +186,7 @@ const systemRoles = [
       "credit-report:read",
       "credit-report:manage",
       "credit-report:approve",
+      "integration:read",
     ],
   },
   {

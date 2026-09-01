@@ -561,6 +561,17 @@ enum CommunicationAttachmentType {
   OTHER
 }
 
+enum IntegrationProvider {
+  ZOHO_DESK
+}
+
+enum ExternalIntegrationEntityType {
+  PARTY_CONTACT
+  CASE_TICKET
+  COMMUNICATION_MESSAGE
+  COMMUNICATION_ATTACHMENT
+}
+
 model User {
   id                 String    @id @default(uuid()) @db.Uuid
   email              String    @unique
@@ -686,6 +697,7 @@ model Tenant {
   addressResearchResults AddressResearchResult[]
   creditBureauReports CreditBureauReport[]
   creditBureauReportEvents CreditBureauReportEvent[]
+  externalIntegrationLinks ExternalIntegrationLink[]
 
   @@index([deletedAt])
 }
@@ -731,6 +743,7 @@ model Case {
   bankTransactions     BankTransaction[]
   addressResearchRequests AddressResearchRequest[]
   creditBureauReports CreditBureauReport[]
+  externalIntegrationLinks ExternalIntegrationLink[]
 
   @@unique([tenantId, caseNumber])
   @@unique([tenantId, sequenceYear, sequenceNumber])
@@ -1216,6 +1229,7 @@ model Party {
   installmentPlans    InstallmentPlan[]
   activityEvents      ActivityEvent[]
   communications      CommunicationEvent[]
+  externalIntegrationLinks ExternalIntegrationLink[]
   bankTransactions     BankTransaction[]
   addressResearchRequests AddressResearchRequest[]
   creditBureauReports CreditBureauReport[]
@@ -1516,10 +1530,37 @@ model CommunicationEvent {
   case               Case?             @relation(fields: [caseId], references: [id], onDelete: Restrict)
   createdByMembership TenantMembership @relation("CommunicationCreatedBy", fields: [createdByMembershipId], references: [id], onDelete: Restrict)
   attachments        CommunicationAttachment[]
+  externalIntegrationLinks ExternalIntegrationLink[]
 
   @@index([tenantId, partyId, occurredAt])
   @@index([tenantId, caseId, occurredAt])
   @@index([createdByMembershipId])
+}
+
+model ExternalIntegrationLink {
+  id              String                        @id @default(uuid()) @db.Uuid
+  tenantId        String                        @db.Uuid
+  provider        IntegrationProvider
+  entityType      ExternalIntegrationEntityType
+  externalId      String                        @db.VarChar(150)
+  partyId         String?                       @db.Uuid
+  caseId          String?                       @db.Uuid
+  communicationId String?                       @db.Uuid
+  metadata        Json?
+  createdAt       DateTime                      @default(now())
+  updatedAt       DateTime                      @updatedAt
+
+  tenant        Tenant              @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  party         Party?              @relation(fields: [partyId], references: [id], onDelete: Restrict)
+  case          Case?               @relation(fields: [caseId], references: [id], onDelete: Restrict)
+  communication CommunicationEvent? @relation(fields: [communicationId], references: [id], onDelete: Restrict)
+
+  @@unique([tenantId, provider, entityType, externalId])
+  @@unique([tenantId, provider, entityType, partyId])
+  @@index([tenantId, provider, entityType])
+  @@index([partyId])
+  @@index([caseId])
+  @@index([communicationId])
 }
 
 model CommunicationAttachment {

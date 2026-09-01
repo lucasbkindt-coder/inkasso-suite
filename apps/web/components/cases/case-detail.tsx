@@ -18,6 +18,7 @@ import { CaseEnforcement } from "./case-enforcement";
 import { CommunicationPanel } from "@/components/communications/communication-panel";
 import { AddressResearchPanel } from "@/components/address-research/address-research-panel";
 import { CreditReportPanel } from "@/components/credit-reporting/credit-report-panel";
+import { ZohoCasePanel } from "@/components/integrations/zoho-case-panel";
 
 export function CaseDetail() {
   const params = useParams<{ id: string }>();
@@ -58,6 +59,7 @@ export function CaseDetail() {
         <CaseOverview caseRecord={caseRecord} />
         <CaseTasks caseId={caseRecord.id} />
         <CommunicationPanel caseId={caseRecord.id} partyId={caseRecord.debtorParty.id} />
+        <ZohoCasePanel caseId={caseRecord.id} />
         <AddressResearchPanel caseId={caseRecord.id} compact partyId={caseRecord.debtorParty.id} />
         <CreditReportPanel caseId={caseRecord.id} compact partyId={caseRecord.debtorParty.id} />
         <CaseDocuments caseId={caseRecord.id} caseStatus={caseRecord.status} debtorType={caseRecord.debtorParty.type} />
