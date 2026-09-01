@@ -109,6 +109,8 @@ const standardPermissions = [
   ["privacy", "read", PermissionScope.TENANT, "Datenschutzfälle anzeigen"],
   ["privacy", "manage", PermissionScope.TENANT, "Datenschutzfälle bearbeiten"],
   ["privacy", "export", PermissionScope.TENANT, "Betroffenenauskünfte exportieren"],
+  ["address-research", "read", PermissionScope.TENANT, "Adressermittlungen anzeigen"],
+  ["address-research", "manage", PermissionScope.TENANT, "Adressermittlungen bearbeiten"],
 ];
 
 const systemRoles = [
@@ -145,6 +147,8 @@ const systemRoles = [
       "document:read",
       "document:create",
       "report:read",
+      "address-research:read",
+      "address-research:manage",
     ],
   },
   {
@@ -170,6 +174,8 @@ const systemRoles = [
       "document:read",
       "document:create",
       "report:read",
+      "address-research:read",
+      "address-research:manage",
     ],
   },
   {
@@ -190,7 +196,7 @@ const systemRoles = [
   {
     name: "Lesen",
     description: "Schreibgeschützter Zugriff auf Inkassoakten und Auswertungen",
-    permissionKeys: ["case:read", "debtor:read", "claim:read", "document:read", "report:read"],
+    permissionKeys: ["case:read", "debtor:read", "claim:read", "document:read", "report:read", "address-research:read"],
   },
 ];
 

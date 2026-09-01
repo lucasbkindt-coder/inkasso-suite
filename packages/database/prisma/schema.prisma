@@ -113,6 +113,37 @@ enum AddressType {
   OTHER
 }
 
+enum AddressResearchStatus {
+  CREATED
+  IN_PROGRESS
+  RESULT_AVAILABLE
+  NO_RESULT
+  REVIEW_REQUIRED
+  APPLIED
+  CANCELLED
+  ERROR
+}
+
+enum AddressResearchReason {
+  UNKNOWN_ADDRESS
+  RETURNED_MAIL
+  MOVED
+  ADDRESS_UNCONFIRMED
+  ENFORCEMENT_PREPARATION
+  OTHER
+}
+
+enum AddressResearchProviderType {
+  MANUAL
+  MOCK
+}
+
+enum AddressResearchConfidence {
+  HIGH
+  MEDIUM
+  LOW
+}
+
 enum ContactType {
   EMAIL
   PHONE
@@ -432,6 +463,12 @@ enum ActivityEventType {
   BANK_TRANSACTION_MANUALLY_MATCHED
   BANK_TRANSACTION_BOOKED
   BANK_TRANSACTION_IGNORED
+  ADDRESS_RESEARCH_CREATED
+  ADDRESS_RESEARCH_RESULT_ADDED
+  ADDRESS_RESEARCH_NO_RESULT
+  ADDRESS_RESEARCH_RESULT_SELECTED
+  ADDRESS_RESEARCH_ADDRESS_APPLIED
+  ADDRESS_RESEARCH_CANCELLED
   TITLE_CREATED
   TITLE_ACTIVATED
   TITLE_VOIDED
@@ -588,6 +625,8 @@ model Tenant {
   communicationAttachments CommunicationAttachment[]
   bankImports         BankImport[]
   bankTransactions    BankTransaction[]
+  addressResearchRequests AddressResearchRequest[]
+  addressResearchResults AddressResearchResult[]
 
   @@index([deletedAt])
 }
@@ -631,6 +670,7 @@ model Case {
   enforcementActions  EnforcementAction[]
   communications      CommunicationEvent[]
   bankTransactions     BankTransaction[]
+  addressResearchRequests AddressResearchRequest[]
 
   @@unique([tenantId, caseNumber])
   @@unique([tenantId, sequenceYear, sequenceNumber])
@@ -1116,6 +1156,7 @@ model Party {
   activityEvents      ActivityEvent[]
   communications      CommunicationEvent[]
   bankTransactions     BankTransaction[]
+  addressResearchRequests AddressResearchRequest[]
 
   @@index([tenantId, deletedAt, displayName])
   @@index([tenantId, type, deletedAt])
@@ -1501,9 +1542,81 @@ model Address {
   deletedAt    DateTime?
 
   party Party @relation(fields: [partyId], references: [id], onDelete: Restrict)
+  researchRequests AddressResearchRequest[]
 
   @@index([partyId, deletedAt, isPrimary])
   @@index([postalCode, city])
+}
+
+model AddressResearchRequest {
+  id                      String                      @id @default(uuid()) @db.Uuid
+  tenantId                String                      @db.Uuid
+  partyId                 String                      @db.Uuid
+  caseId                  String?                     @db.Uuid
+  status                  AddressResearchStatus       @default(CREATED)
+  reason                  AddressResearchReason?
+  provider                AddressResearchProviderType @default(MANUAL)
+  externalReference       String?
+  requestedByMembershipId String                      @db.Uuid
+  requestedAt             DateTime                    @default(now())
+  completedAt             DateTime?
+  resultCount             Int                         @default(0)
+  selectedResultId        String?                     @unique @db.Uuid
+  costAmount              Decimal?                    @db.Decimal(15, 2)
+  costCurrency            String?                     @db.Char(3)
+  notes                   String?
+  originalAddressId       String?                     @db.Uuid
+  originalStreet          String?
+  originalHouseNumber     String?
+  originalAddressLine2    String?
+  originalPostalCode      String?
+  originalCity            String?
+  originalCountry         String?                     @db.Char(2)
+  createdAt               DateTime                    @default(now())
+  updatedAt               DateTime                    @updatedAt
+
+  tenant                Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  party                 Party                   @relation(fields: [partyId], references: [id], onDelete: Restrict)
+  case                  Case?                   @relation(fields: [caseId], references: [id], onDelete: Restrict)
+  requestedByMembership TenantMembership        @relation("AddressResearchRequestedBy", fields: [requestedByMembershipId], references: [id], onDelete: Restrict)
+  originalAddress       Address?                @relation(fields: [originalAddressId], references: [id], onDelete: Restrict)
+  results               AddressResearchResult[] @relation("AddressResearchResults")
+  selectedResult        AddressResearchResult?  @relation("AddressResearchSelectedResult", fields: [selectedResultId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId, status, requestedAt])
+  @@index([tenantId, partyId, requestedAt])
+  @@index([tenantId, caseId, requestedAt])
+  @@index([requestedByMembershipId])
+}
+
+model AddressResearchResult {
+  id                    String                    @id @default(uuid()) @db.Uuid
+  tenantId              String                    @db.Uuid
+  researchRequestId     String                    @db.Uuid
+  street                String
+  houseNumber           String?
+  postalCode            String
+  city                  String
+  country               String                    @default("DE") @db.Char(2)
+  additionalAddressLine String?
+  source                String
+  sourceReference       String?
+  sourceDate            DateTime?
+  confidence            AddressResearchConfidence
+  qualityReason         String?
+  isSelected            Boolean                   @default(false)
+  appliedAt             DateTime?
+  appliedByMembershipId String?                   @db.Uuid
+  rawProviderData       Json?
+  createdAt             DateTime                  @default(now())
+
+  tenant              Tenant                   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  researchRequest     AddressResearchRequest   @relation("AddressResearchResults", fields: [researchRequestId], references: [id], onDelete: Restrict)
+  selectedForRequest  AddressResearchRequest?  @relation("AddressResearchSelectedResult")
+  appliedByMembership TenantMembership?        @relation("AddressResearchAppliedBy", fields: [appliedByMembershipId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId, researchRequestId, createdAt])
+  @@index([appliedByMembershipId])
 }
 
 model Contact {
@@ -1587,6 +1700,8 @@ model TenantMembership {
   reviewedDataSubjectReviews DataSubjectDataReview[] @relation("DataSubjectReviewBy")
   importedBankFiles BankImport[] @relation("BankImportImportedBy")
   reviewedBankTransactions BankTransaction[] @relation("BankTransactionReviewedBy")
+  requestedAddressResearches AddressResearchRequest[] @relation("AddressResearchRequestedBy")
+  appliedAddressResearchResults AddressResearchResult[] @relation("AddressResearchAppliedBy")
 
   @@unique([tenantId, userId])
   @@index([userId, deletedAt])

@@ -262,7 +262,11 @@ export class DataSubjectRequestsService {
       activity,
       clientContacts,
     ] = await Promise.all([
-      client.address.count({ where: { partyId, deletedAt: null } }),
+      Promise.all([
+        client.address.count({ where: { partyId, deletedAt: null } }),
+        client.addressResearchRequest.count({ where: { tenantId, partyId } }),
+        client.addressResearchResult.count({ where: { tenantId, researchRequest: { partyId } } }),
+      ]).then(([addressCount, requestCount, resultCount]) => addressCount + requestCount + resultCount),
       client.contact.count({ where: { partyId, deletedAt: null } }),
       client.claim.count({ where: { tenantId, caseId: { in: caseIds }, deletedAt: null } }),
       client.caseLedgerEntry.count({ where: caseWhere }),
@@ -308,8 +312,16 @@ export class DataSubjectRequestsService {
     });
     const caseIds = cases.map(({ id }) => id);
     const caseWhere = { tenantId: item.tenantId, caseId: { in: caseIds } };
-    const [addresses, contacts, ledger, paymentAllocations, tasks, documents, communications, installmentRequests, installmentPlans, portalAccounts, enforcementTitles, enforcementActions, activity] = await Promise.all([
+    const [addresses, addressResearch, contacts, ledger, paymentAllocations, tasks, documents, communications, installmentRequests, installmentPlans, portalAccounts, enforcementTitles, enforcementActions, activity] = await Promise.all([
       this.prisma.address.findMany({ where: { partyId: party.id, deletedAt: null }, select: { street: true, houseNumber: true, postalCode: true, city: true, country: true } }),
+      this.prisma.addressResearchRequest.findMany({
+        where: { tenantId: item.tenantId, partyId: party.id },
+        select: {
+          requestedAt: true, completedAt: true, reason: true, provider: true, status: true,
+          results: { select: { street: true, houseNumber: true, postalCode: true, city: true, country: true, source: true, sourceDate: true, confidence: true, qualityReason: true, appliedAt: true } },
+        },
+        orderBy: { requestedAt: "asc" },
+      }),
       this.prisma.contact.findMany({ where: { partyId: party.id, deletedAt: null }, select: { type: true, value: true, label: true } }),
       this.prisma.caseLedgerEntry.findMany({ where: caseWhere, select: { caseId: true, side: true, type: true, status: true, amount: true, currency: true, bookingDate: true, valueDate: true, description: true, externalReference: true } }),
       this.prisma.paymentAllocation.findMany({ where: caseWhere, select: { caseId: true, amount: true, policy: true, allocationOrder: true, status: true, createdAt: true, reversedAt: true } }),
@@ -323,6 +335,6 @@ export class DataSubjectRequestsService {
       this.prisma.enforcementAction.findMany({ where: caseWhere, select: { caseId: true, type: true, status: true, requestedAt: true, completedAt: true, referenceNumber: true, amountAtRequest: true, notes: true } }),
       this.prisma.activityEvent.findMany({ where: { tenantId: item.tenantId, OR: [{ partyId: party.id }, { caseId: { in: caseIds } }] }, select: { eventType: true, title: true, description: true, createdAt: true }, orderBy: { createdAt: "asc" } }),
     ]);
-    return { version: 1, generatedAt: new Date().toISOString(), subject: { type: "PARTY", displayName: party.displayName, partyType: party.type, addresses, contacts, portalAccounts }, cases, ledger, paymentAllocations, tasks, documents, communications, installmentRequests, installmentPlans, enforcementTitles, enforcementActions, activity, dataOrigin: "nicht strukturiert im System gespeichert", recipients: "nicht strukturiert im System gespeichert" };
+    return { version: 1, generatedAt: new Date().toISOString(), subject: { type: "PARTY", displayName: party.displayName, partyType: party.type, addresses, addressResearch, contacts, portalAccounts }, cases, ledger, paymentAllocations, tasks, documents, communications, installmentRequests, installmentPlans, enforcementTitles, enforcementActions, activity, dataOrigin: "nicht strukturiert im System gespeichert", recipients: "nicht strukturiert im System gespeichert" };
   }
 }

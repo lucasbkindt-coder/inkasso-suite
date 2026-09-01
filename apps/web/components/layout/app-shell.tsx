@@ -18,6 +18,7 @@ const navigationPermissions: Record<string, string[]> = {
   "/akten": ["case:read"],
   "/parteien": ["debtor:read"],
   "/schuldner": ["debtor:read"],
+  "/adressermittlung": ["address-research:read"],
   "/zahlungen/import": ["bank-import:read"],
   "/aufgaben": ["case:read"],
   "/auftragseingang": ["case:read"],

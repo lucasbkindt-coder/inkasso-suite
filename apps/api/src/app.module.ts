@@ -24,6 +24,7 @@ import { HealthModule } from "./health/health.module";
 import { ClientContactsModule } from "./client-contacts/client-contacts.module";
 import { DataSubjectRequestsModule } from "./data-subject-requests/data-subject-requests.module";
 import { BankImportsModule } from "./bank-imports/bank-imports.module";
+import { AddressResearchModule } from "./address-research/address-research.module";
 
 @Module({
   imports: [
@@ -37,6 +38,7 @@ import { BankImportsModule } from "./bank-imports/bank-imports.module";
     ClientContactsModule,
     DataSubjectRequestsModule,
     BankImportsModule,
+    AddressResearchModule,
     CasesModule,
     LedgerModule,
     LegalReferencesModule,
