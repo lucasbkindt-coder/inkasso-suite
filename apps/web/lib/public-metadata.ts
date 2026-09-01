@@ -2,10 +2,10 @@ import type { Metadata } from "next";
 
 const siteUrl = new URL("https://www.payveo.de");
 
-export function publicMetadata(title: string, description: string, path: string): Metadata {
+export function publicMetadata(title: string, description: string, path: string, brandFirst = false): Metadata {
   const canonical = new URL(path, siteUrl);
   return {
-    title: `${title} | payveo`,
+    title: brandFirst ? `payveo | ${title}` : `${title} | payveo`,
     description,
     alternates: { canonical },
     openGraph: {

@@ -14,7 +14,7 @@ async function hasStaffSession() {
 export async function generateMetadata() {
   return (await hasStaffSession())
     ? { title: "payveo – Arbeitsbereich", description: "payveo Forderungsmanagement" }
-    : publicMetadata("Professionelles Forderungsmanagement", "payveo unterstützt Unternehmen bei einer klaren, strukturierten und zeitgemäßen Forderungsbearbeitung.", "/");
+    : publicMetadata("Professionelles Forderungsmanagement", "payveo unterstützt Unternehmen bei einer klaren, verbindlichen und zeitgemäßen Forderungsbearbeitung.", "/", true);
 }
 
 export default async function HomePage() {
