@@ -96,6 +96,7 @@ enum DataSubjectDataCategory {
   ENFORCEMENT
   ACTIVITY
   CLIENT_CONTACT
+  CREDIT_REPORTING
 }
 
 enum PartyRoleType {
@@ -184,6 +185,56 @@ enum ClaimStatus {
   PAID
   DISPUTED
   CANCELLED
+}
+
+enum ClaimDisputeStatus {
+  NONE
+  DISPUTED
+  PARTIALLY_DISPUTED
+  RESOLVED
+}
+
+enum CreditBureauProvider {
+  MANUAL
+  MOCK
+  SCHUFA
+  EXPERIAN
+  CREDITREFORM
+  OTHER
+}
+
+enum CreditBureauReportStatus {
+  DRAFT
+  ELIGIBILITY_REVIEW
+  ELIGIBLE
+  NOT_ELIGIBLE
+  APPROVED
+  READY_FOR_SUBMISSION
+  SUBMITTED
+  ACCEPTED
+  REJECTED
+  UPDATED
+  SETTLED
+  REVOKED
+  CANCELLED
+  ERROR
+}
+
+enum CreditBureauEligibilityStatus {
+  PENDING
+  ELIGIBLE
+  NOT_ELIGIBLE
+  REVIEW_REQUIRED
+}
+
+enum CreditBureauReportEventType {
+  CREATED
+  ELIGIBILITY_CHECKED
+  APPROVED
+  APPROVAL_REVOKED
+  STATUS_CHANGED
+  APPROVAL_STALE
+  SETTLED
 }
 
 enum LedgerEntrySide {
@@ -469,6 +520,12 @@ enum ActivityEventType {
   ADDRESS_RESEARCH_RESULT_SELECTED
   ADDRESS_RESEARCH_ADDRESS_APPLIED
   ADDRESS_RESEARCH_CANCELLED
+  CREDIT_REPORT_CREATED
+  CREDIT_REPORT_ELIGIBILITY_CHECKED
+  CREDIT_REPORT_APPROVED
+  CREDIT_REPORT_APPROVAL_REVOKED
+  CREDIT_REPORT_STATUS_CHANGED
+  CREDIT_REPORT_SETTLED
   TITLE_CREATED
   TITLE_ACTIVATED
   TITLE_VOIDED
@@ -627,6 +684,8 @@ model Tenant {
   bankTransactions    BankTransaction[]
   addressResearchRequests AddressResearchRequest[]
   addressResearchResults AddressResearchResult[]
+  creditBureauReports CreditBureauReport[]
+  creditBureauReportEvents CreditBureauReportEvent[]
 
   @@index([deletedAt])
 }
@@ -671,6 +730,7 @@ model Case {
   communications      CommunicationEvent[]
   bankTransactions     BankTransaction[]
   addressResearchRequests AddressResearchRequest[]
+  creditBureauReports CreditBureauReport[]
 
   @@unique([tenantId, caseNumber])
   @@unique([tenantId, sequenceYear, sequenceNumber])
@@ -1108,6 +1168,7 @@ model Claim {
   currency        String      @default("EUR") @db.Char(3)
   description     String?
   status          ClaimStatus @default(OPEN)
+  disputeStatus   ClaimDisputeStatus @default(NONE)
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
   deletedAt       DateTime?
@@ -1157,6 +1218,7 @@ model Party {
   communications      CommunicationEvent[]
   bankTransactions     BankTransaction[]
   addressResearchRequests AddressResearchRequest[]
+  creditBureauReports CreditBureauReport[]
 
   @@index([tenantId, deletedAt, displayName])
   @@index([tenantId, type, deletedAt])
@@ -1619,6 +1681,67 @@ model AddressResearchResult {
   @@index([appliedByMembershipId])
 }
 
+model CreditBureauReport {
+  id                       String                               @id @default(uuid()) @db.Uuid
+  tenantId                 String                               @db.Uuid
+  partyId                  String                               @db.Uuid
+  caseId                   String                               @db.Uuid
+  provider                 CreditBureauProvider
+  status                   CreditBureauReportStatus             @default(DRAFT)
+  eligibilityStatus        CreditBureauEligibilityStatus        @default(PENDING)
+  eligibilityReason        String?
+  eligibilityDetails       Json?
+  eligibilityCheckedAt     DateTime?
+  approvedAt               DateTime?
+  approvedByMembershipId   String?                              @db.Uuid
+  approvalReason           String?
+  approvalSnapshot         Json?
+  approvalStaleAt          DateTime?
+  submittedAt              DateTime?
+  externalReference        String?
+  reportedAmount           Decimal?                             @db.Decimal(15, 2)
+  currency                 String                               @default("EUR") @db.Char(3)
+  settledAt                DateTime?
+  cancelledAt              DateTime?
+  activeKey                String?                              @unique
+  createdByMembershipId    String                               @db.Uuid
+  createdAt                DateTime                             @default(now())
+  updatedAt                DateTime                             @updatedAt
+
+  tenant               Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  party                Party                  @relation(fields: [partyId], references: [id], onDelete: Restrict)
+  case                 Case                   @relation(fields: [caseId], references: [id], onDelete: Restrict)
+  approvedByMembership TenantMembership?      @relation("CreditReportApprovedBy", fields: [approvedByMembershipId], references: [id], onDelete: Restrict)
+  createdByMembership  TenantMembership       @relation("CreditReportCreatedBy", fields: [createdByMembershipId], references: [id], onDelete: Restrict)
+  events               CreditBureauReportEvent[]
+
+  @@index([tenantId, status, updatedAt])
+  @@index([tenantId, partyId, updatedAt])
+  @@index([tenantId, caseId, provider])
+  @@index([approvedByMembershipId])
+  @@index([createdByMembershipId])
+}
+
+model CreditBureauReportEvent {
+  id                String                      @id @default(uuid()) @db.Uuid
+  tenantId          String                      @db.Uuid
+  reportId          String                      @db.Uuid
+  eventType         CreditBureauReportEventType
+  statusBefore      CreditBureauReportStatus?
+  statusAfter       CreditBureauReportStatus?
+  actorMembershipId String?                     @db.Uuid
+  reason            String?
+  metadata          Json?
+  createdAt         DateTime                    @default(now())
+
+  tenant          Tenant            @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  report          CreditBureauReport @relation(fields: [reportId], references: [id], onDelete: Restrict)
+  actorMembership TenantMembership? @relation("CreditReportEventActor", fields: [actorMembershipId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId, reportId, createdAt])
+  @@index([actorMembershipId])
+}
+
 model Contact {
   id        String      @id @default(uuid()) @db.Uuid
   partyId   String      @db.Uuid
@@ -1702,6 +1825,9 @@ model TenantMembership {
   reviewedBankTransactions BankTransaction[] @relation("BankTransactionReviewedBy")
   requestedAddressResearches AddressResearchRequest[] @relation("AddressResearchRequestedBy")
   appliedAddressResearchResults AddressResearchResult[] @relation("AddressResearchAppliedBy")
+  createdCreditBureauReports CreditBureauReport[] @relation("CreditReportCreatedBy")
+  approvedCreditBureauReports CreditBureauReport[] @relation("CreditReportApprovedBy")
+  creditBureauReportEvents CreditBureauReportEvent[] @relation("CreditReportEventActor")
 
   @@unique([tenantId, userId])
   @@index([userId, deletedAt])

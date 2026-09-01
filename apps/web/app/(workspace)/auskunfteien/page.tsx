@@ -1,0 +1,2 @@
+import { CreditReportPanel } from "@/components/credit-reporting/credit-report-panel";
+export default function CreditReportingPage(){return <div className="space-y-6"><header><p className="text-sm font-medium text-primary">payveo · Arbeitsbereich</p><h2 className="mt-1 text-3xl font-semibold tracking-tight">Auskunfteien</h2><p className="mt-2 text-sm text-muted-foreground">Interne Meldefähigkeitsprüfung und Freigabeworkflow – ohne externe Übertragung.</p></header><CreditReportPanel/></div>}

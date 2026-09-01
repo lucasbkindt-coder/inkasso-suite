@@ -17,6 +17,7 @@ import { CaseTimeline } from "./case-timeline";
 import { CaseEnforcement } from "./case-enforcement";
 import { CommunicationPanel } from "@/components/communications/communication-panel";
 import { AddressResearchPanel } from "@/components/address-research/address-research-panel";
+import { CreditReportPanel } from "@/components/credit-reporting/credit-report-panel";
 
 export function CaseDetail() {
   const params = useParams<{ id: string }>();
@@ -58,6 +59,7 @@ export function CaseDetail() {
         <CaseTasks caseId={caseRecord.id} />
         <CommunicationPanel caseId={caseRecord.id} partyId={caseRecord.debtorParty.id} />
         <AddressResearchPanel caseId={caseRecord.id} compact partyId={caseRecord.debtorParty.id} />
+        <CreditReportPanel caseId={caseRecord.id} compact partyId={caseRecord.debtorParty.id} />
         <CaseDocuments caseId={caseRecord.id} caseStatus={caseRecord.status} debtorType={caseRecord.debtorParty.type} />
         <CaseInstallmentPlan caseId={caseRecord.id} />
         <CaseEnforcement caseId={caseRecord.id} />

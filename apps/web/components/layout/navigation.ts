@@ -1,46 +1,59 @@
 import {
+  BadgeCheck,
   Building2,
+  ContactRound,
   FolderKanban,
+  HandCoins,
+  Inbox,
   LayoutDashboard,
   Landmark,
   ListTodo,
   MapPinCheck,
   Settings,
   ShieldCheck,
+  UserCog,
   Users,
-  UsersRound,
 } from "lucide-react";
 
 export const navigationGroups = [
   {
-    label: "Übersicht",
-    items: [{ href: "/", label: "Dashboard", icon: LayoutDashboard }],
-  },
-  {
-    label: "Forderungsmanagement",
+    label: "Arbeit",
     items: [
+      { href: "/", label: "Dashboard", icon: LayoutDashboard },
       { href: "/akten", label: "Inkassoakten", icon: FolderKanban },
-      { href: "/parteien", label: "Parteien", icon: UsersRound },
-      { href: "/schuldner", label: "Schuldner", icon: Users },
-      { href: "/adressermittlung", label: "Adressermittlung", icon: MapPinCheck },
-      { href: "/zahlungen/import", label: "Bankimport", icon: Landmark },
+      { href: "/aufgaben", label: "Aufgaben", icon: ListTodo },
+      { href: "/auftragseingang", label: "Auftragseingang", icon: Inbox },
     ],
   },
   {
-    label: "Arbeitsorganisation",
+    label: "Parteien",
     items: [
-      { href: "/aufgaben", label: "Aufgaben & Fristen", icon: ListTodo },
-      { href: "/auftragseingang", label: "Auftragseingang", icon: FolderKanban },
-      { href: "/ratenanfragen", label: "Ratenanfragen", icon: ListTodo },
-    ],
-  },
-  {
-    label: "Administration",
-    items: [
+      { href: "/parteien", label: "Parteien", icon: ContactRound },
       { href: "/mandanten", label: "Mandanten", icon: Building2 },
-      { href: "/benutzer", label: "Benutzer", icon: UsersRound },
+      { href: "/schuldner", label: "Schuldner", icon: Users },
+    ],
+  },
+  {
+    label: "Finanzen",
+    items: [{ href: "/zahlungen/import", label: "Bankimport", icon: Landmark }],
+  },
+  {
+    label: "Bearbeitung",
+    items: [
+      { href: "/ratenanfragen", label: "Ratenanfragen", icon: HandCoins },
+      { href: "/adressermittlung", label: "Adressermittlung", icon: MapPinCheck },
+      { href: "/auskunfteien", label: "Auskunfteien", icon: BadgeCheck },
+    ],
+  },
+  {
+    label: "Datenschutz",
+    items: [{ href: "/datenschutz", label: "Datenschutz", icon: ShieldCheck }],
+  },
+  {
+    label: "Verwaltung",
+    items: [
+      { href: "/benutzer", label: "Benutzer", icon: UserCog },
       { href: "/einstellungen", label: "Einstellungen", icon: Settings },
-      { href: "/datenschutz", label: "Datenschutz", icon: ShieldCheck },
     ],
   },
 ] as const;
@@ -50,10 +63,12 @@ export const pageTitles: Record<string, string> = {
   "/akten": "Inkassoakten",
   "/schuldner": "Schuldner",
   "/adressermittlung": "Adressermittlung",
+  "/auskunfteien": "Auskunfteien",
   "/parteien": "Parteien",
-  "/aufgaben": "Aufgaben & Fristen",
+  "/aufgaben": "Aufgaben",
   "/auftragseingang": "Auftragseingang",
   "/ratenanfragen": "Ratenanfragen",
+  "/ratenplaene": "Ratenplan",
   "/mandanten": "Mandanten",
   "/zahlungen": "Zahlungen",
   "/zahlungen/import": "Bankimport",
@@ -64,6 +79,7 @@ export const pageTitles: Record<string, string> = {
 };
 
 export function isNavigationItemActive(pathname: string, href: string) {
+  if (href === "/ratenanfragen" && pathname.startsWith("/ratenplaene/")) return true;
   return href === "/" ? pathname === href : pathname === href || pathname.startsWith(`${href}/`);
 }
 
@@ -74,5 +90,6 @@ export function resolvePageTitle(pathname: string) {
   if (pathname.startsWith("/schuldner/")) return "Schuldner";
   if (pathname.startsWith("/auftragseingang/")) return "Auftragseingang";
   if (pathname.startsWith("/ratenanfragen/")) return "Ratenanfrage";
+  if (pathname.startsWith("/ratenplaene/")) return "Ratenplan";
   return pageTitles[pathname] ?? "Arbeitsbereich";
 }

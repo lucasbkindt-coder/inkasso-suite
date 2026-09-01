@@ -20,6 +20,7 @@ import { TenantContextService } from "../tenant/tenant-context.service";
 import { ActivityService } from "../activity/activity.service";
 import { CreateLedgerEntryDto } from "./dto/create-ledger-entry.dto";
 import { CreatePaymentDto } from "./dto/create-payment.dto";
+import { markCreditReportsForCaseReview } from "../credit-reporting/credit-report-state";
 
 const debitTypes = new Set<LedgerEntryType>([
   LedgerEntryType.INTEREST,
@@ -274,6 +275,8 @@ export class LedgerService {
     const allAllocations = await tx.paymentAllocation.findMany({
       where: { tenantId, caseId, status: PaymentAllocationStatus.ACTIVE },
     });
+    const balances = this.calculateTotals(ledgerEntries, this.allocationMap(allAllocations));
+    await markCreditReportsForCaseReview(tx, { tenantId, caseId, reasonCode: "PAYMENT_CHANGED", actorMembershipId });
     return {
       payment,
       allocations: allocations.map((allocation) => {
@@ -285,7 +288,7 @@ export class LedgerService {
         };
       }),
       unallocatedAmount: remaining.toFixed(2),
-      balances: this.calculateTotals(ledgerEntries, this.allocationMap(allAllocations)),
+      balances,
     };
   }
 
@@ -333,6 +336,7 @@ export class LedgerService {
           sourceEntityId: entry.id,
         });
       }
+      await markCreditReportsForCaseReview(tx, { tenantId, caseId, reasonCode: "LEDGER_CHANGED", actorMembershipId: this.tenantContext.getStaffContext().tenantMembershipId });
       return entry;
     });
   }
@@ -405,6 +409,7 @@ export class LedgerService {
           });
         }
       }
+      await markCreditReportsForCaseReview(tx, { tenantId, caseId, reasonCode: entry.type === LedgerEntryType.PAYMENT ? "PAYMENT_REVERSED" : "LEDGER_REVERSED", actorMembershipId: this.tenantContext.getStaffContext().tenantMembershipId });
       return reversal;
     });
   }

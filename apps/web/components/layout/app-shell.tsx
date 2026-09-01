@@ -19,6 +19,7 @@ const navigationPermissions: Record<string, string[]> = {
   "/parteien": ["debtor:read"],
   "/schuldner": ["debtor:read"],
   "/adressermittlung": ["address-research:read"],
+  "/auskunfteien": ["credit-report:read"],
   "/zahlungen/import": ["bank-import:read"],
   "/aufgaben": ["case:read"],
   "/auftragseingang": ["case:read"],
@@ -47,7 +48,7 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
 
   const groups = navigationGroups.map((group) => ({
     ...group,
-    items: group.items.filter((item) => permissions === null || (navigationPermissions[item.href] ?? []).every((permission) => permissions.includes(permission))),
+    items: group.items.filter((item) => permissions !== null && (navigationPermissions[item.href] ?? []).every((permission) => permissions.includes(permission))),
   })).filter((group) => group.items.length > 0);
 
   return (

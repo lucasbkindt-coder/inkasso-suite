@@ -1,0 +1,20 @@
+import { Building2, FileSearch, Landmark, MapPinCheck, MessageSquareText, Scale, WalletCards } from "lucide-react";
+
+import { CtaSection, PageHero, SectionIntro } from "@/components/public-site/public-elements";
+import { PublicShell } from "@/components/public-site/public-shell";
+import { publicMetadata } from "@/lib/public-metadata";
+
+export const metadata = publicMetadata("Leistungen", "Strukturierte Forderungsbearbeitung, Zahlungsmanagement und nachvollziehbare Kommunikation mit payveo.", "/leistungen");
+
+const sections = [
+  [FileSearch, "Außergerichtliche Forderungsbearbeitung", "Wir ordnen die übergebenen Forderungsdaten, prüfen den Bearbeitungsstand und führen die außergerichtliche Kommunikation strukturiert fort.", ["Nachvollziehbare Vorgangsführung", "Schriftliche Zahlungsaufforderungen", "Dokumentierte Kommunikation und Fristen"]],
+  [WalletCards, "Zahlungsmanagement", "Zahlungseingänge und Vereinbarungen werden dem jeweiligen Vorgang zugeordnet und im weiteren Verlauf berücksichtigt.", ["Überwachung eingehender Zahlungen", "Nachvollziehbare Zahlungszuordnung", "Ratenvereinbarungen und deren Fälligkeiten"]],
+  [MessageSquareText, "Kommunikation", "Eine klare, sachliche Ansprache schafft Orientierung und ermöglicht es, Rückfragen oder Lösungsmöglichkeiten geordnet zu bearbeiten.", ["Schriftliche und dokumentierte Kontakte", "Verständliche Darstellung des Vorgangs", "Respektvoller Umgang mit Schuldnern"]],
+  [Landmark, "Gerichtliche Schritte", "Bleibt eine außergerichtliche Lösung aus, können gerichtliche Schritte im Rahmen der jeweiligen Voraussetzungen vorbereitet und bewertet werden.", ["Vorbereitung des gerichtlichen Mahnverfahrens", "Dokumentation des Forderungsstands", "Keine pauschale oder automatische Eskalation"]],
+  [Scale, "Titulierte Forderungen und Vollstreckung", "Bestehende Titel und mögliche Vollstreckungsmaßnahmen werden fallbezogen dokumentiert und für die weitere Bearbeitung vorbereitet.", ["Erfassung vorhandener Titel", "Forderungsstand als Entscheidungsgrundlage", "Vorbereitung geeigneter weiterer Maßnahmen"]],
+  [MapPinCheck, "Adressklärung", "Wenn eine aktuelle Anschrift fehlt, kann eine kontrollierte Adressklärung als eigener Bearbeitungsschritt dokumentiert werden.", ["Nachvollziehbarer Rechercheauftrag", "Prüfung gefundener Anschriften", "Kontrollierte Übernahme neuer Adressdaten"]],
+] as const;
+
+export default function ServicesPage() {
+  return <PublicShell><PageHero description="Forderungsmanagement besteht aus mehr als einzelnen Mahnschreiben. Entscheidend sind ein geordneter Prozess, belastbare Daten und eine konsequente, angemessene Bearbeitung." eyebrow="Leistungen" title="Strukturierte Bearbeitung entlang des gesamten Forderungsverlaufs" /><section className="mx-auto max-w-7xl px-5 py-20 sm:px-8 lg:py-28"><SectionIntro description="Welche Schritte sinnvoll sind, richtet sich nach dem konkreten Vorgang. payveo bildet die Bearbeitung nachvollziehbar ab und vermeidet automatische Eskalationen ohne fachliche Prüfung." title="Bearbeitung mit klarer Einordnung" /><div className="mt-14 divide-y divide-slate-200 border-y border-slate-200">{sections.map(([Icon,title,text,items],index)=><article className="grid gap-6 py-10 lg:grid-cols-[5rem_1fr_1fr] lg:gap-10" key={title}><div className="grid size-14 place-items-center rounded-2xl bg-[#e5f4fb] text-[#007FC5]"><Icon className="size-6" /></div><div><p className="text-sm font-semibold text-[#007FC5]">{String(index+1).padStart(2,"0")}</p><h2 className="mt-2 text-2xl font-semibold tracking-tight">{title}</h2><p className="mt-4 leading-7 text-slate-600">{text}</p></div><ul className="space-y-3 lg:pt-8">{items.map(item=><li className="flex gap-3 text-sm leading-6 text-slate-700" key={item}><Building2 className="mt-1 size-4 shrink-0 text-[#007FC5]" />{item}</li>)}</ul></article>)}</div></section><CtaSection description="Bestehende Mandanten übermitteln neue Vorgänge über ihren geschützten Zugang." primary={["Zum Mandantenportal","/portal/login"]} secondary={["Für Unternehmen","/fuer-unternehmen"]} title="Forderungen geordnet übergeben" /></PublicShell>;
+}

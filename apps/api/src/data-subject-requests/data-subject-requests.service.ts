@@ -6,6 +6,7 @@ import { ActivityService } from "../activity/activity.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { TenantContextService } from "../tenant/tenant-context.service";
 import { CreateDataSubjectRequestDto, ReviewDataDto, UpdateDataSubjectRequestDto, VerifyIdentityDto } from "./dto";
+import { markCreditReportsForPartyReview } from "../credit-reporting/credit-report-state";
 
 const categories = Object.values(DataSubjectDataCategory);
 
@@ -179,6 +180,7 @@ export class DataSubjectRequestsService {
       await tx.party.update({ where: { id: item.subjectPartyId! }, data: apply ? { processingRestrictedAt: now, processingRestrictionReason: reason.trim() } : { processingRestrictedAt: null, processingRestrictionReason: null } });
       await tx.dataSubjectRequest.update({ where: { id: item.id }, data: { decision: apply ? "Verarbeitung eingeschränkt" : "Verarbeitungseinschränkung aufgehoben", decisionReason: reason.trim(), status: DataSubjectRequestStatus.APPROVED } });
       await this.activity.recordStaffEvent(tx, actorMembershipId, { tenantId: item.tenantId, partyId: item.subjectPartyId!, eventType: apply ? "DATA_SUBJECT_RESTRICTION_APPLIED" : "DATA_SUBJECT_RESTRICTION_REMOVED", description: apply ? "Verarbeitung eingeschränkt." : "Verarbeitungseinschränkung aufgehoben.", sourceEntityType: "DataSubjectRequest", sourceEntityId: item.id });
+      await markCreditReportsForPartyReview(tx, { tenantId: item.tenantId, partyId: item.subjectPartyId!, reasonCode: apply ? "PROCESSING_RESTRICTION_APPLIED" : "PROCESSING_RESTRICTION_REMOVED", actorMembershipId });
       if (item.status !== DataSubjectRequestStatus.APPROVED) await this.recordStatusChanged(tx, item, DataSubjectRequestStatus.APPROVED);
     });
     return apply ? { restrictedAt: now } : { restricted: false };
@@ -299,6 +301,7 @@ export class DataSubjectRequestsService {
     result.ENFORCEMENT = titles + actions;
     result.ACTIVITY = activity;
     result.CLIENT_CONTACT = clientContacts;
+    result.CREDIT_REPORTING = await client.creditBureauReport.count({ where: { tenantId, partyId } }) + await client.creditBureauReportEvent.count({ where: { tenantId, report: { partyId } } });
     return result;
   }
 
@@ -312,7 +315,7 @@ export class DataSubjectRequestsService {
     });
     const caseIds = cases.map(({ id }) => id);
     const caseWhere = { tenantId: item.tenantId, caseId: { in: caseIds } };
-    const [addresses, addressResearch, contacts, ledger, paymentAllocations, tasks, documents, communications, installmentRequests, installmentPlans, portalAccounts, enforcementTitles, enforcementActions, activity] = await Promise.all([
+    const [addresses, addressResearch, creditReporting, contacts, ledger, paymentAllocations, tasks, documents, communications, installmentRequests, installmentPlans, portalAccounts, enforcementTitles, enforcementActions, activity] = await Promise.all([
       this.prisma.address.findMany({ where: { partyId: party.id, deletedAt: null }, select: { street: true, houseNumber: true, postalCode: true, city: true, country: true } }),
       this.prisma.addressResearchRequest.findMany({
         where: { tenantId: item.tenantId, partyId: party.id },
@@ -321,6 +324,16 @@ export class DataSubjectRequestsService {
           results: { select: { street: true, houseNumber: true, postalCode: true, city: true, country: true, source: true, sourceDate: true, confidence: true, qualityReason: true, appliedAt: true } },
         },
         orderBy: { requestedAt: "asc" },
+      }),
+      this.prisma.creditBureauReport.findMany({
+        where: { tenantId: item.tenantId, partyId: party.id },
+        select: {
+          provider: true, status: true, eligibilityStatus: true, eligibilityReason: true,
+          reportedAmount: true, currency: true, approvedAt: true, submittedAt: true, settledAt: true, cancelledAt: true,
+          case: { select: { caseNumber: true } },
+          events: { select: { eventType: true, statusBefore: true, statusAfter: true, reason: true, createdAt: true }, orderBy: { createdAt: "asc" } },
+        },
+        orderBy: { createdAt: "asc" },
       }),
       this.prisma.contact.findMany({ where: { partyId: party.id, deletedAt: null }, select: { type: true, value: true, label: true } }),
       this.prisma.caseLedgerEntry.findMany({ where: caseWhere, select: { caseId: true, side: true, type: true, status: true, amount: true, currency: true, bookingDate: true, valueDate: true, description: true, externalReference: true } }),
@@ -335,6 +348,6 @@ export class DataSubjectRequestsService {
       this.prisma.enforcementAction.findMany({ where: caseWhere, select: { caseId: true, type: true, status: true, requestedAt: true, completedAt: true, referenceNumber: true, amountAtRequest: true, notes: true } }),
       this.prisma.activityEvent.findMany({ where: { tenantId: item.tenantId, OR: [{ partyId: party.id }, { caseId: { in: caseIds } }] }, select: { eventType: true, title: true, description: true, createdAt: true }, orderBy: { createdAt: "asc" } }),
     ]);
-    return { version: 1, generatedAt: new Date().toISOString(), subject: { type: "PARTY", displayName: party.displayName, partyType: party.type, addresses, addressResearch, contacts, portalAccounts }, cases, ledger, paymentAllocations, tasks, documents, communications, installmentRequests, installmentPlans, enforcementTitles, enforcementActions, activity, dataOrigin: "nicht strukturiert im System gespeichert", recipients: "nicht strukturiert im System gespeichert" };
+    return { version: 1, generatedAt: new Date().toISOString(), subject: { type: "PARTY", displayName: party.displayName, partyType: party.type, addresses, addressResearch, creditReporting, contacts, portalAccounts }, cases, ledger, paymentAllocations, tasks, documents, communications, installmentRequests, installmentPlans, enforcementTitles, enforcementActions, activity, dataOrigin: "nicht strukturiert im System gespeichert", recipients: "nicht strukturiert im System gespeichert" };
   }
 }

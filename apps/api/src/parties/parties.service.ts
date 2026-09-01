@@ -7,6 +7,7 @@ import { TenantContextService } from "../tenant/tenant-context.service";
 import { CreatePartyDto } from "./dto/create-party.dto";
 import { QueryPartiesDto } from "./dto/query-parties.dto";
 import { UpdatePartyDto } from "./dto/update-party.dto";
+import { markCreditReportsForPartyReview } from "../credit-reporting/credit-report-state";
 
 const detailInclude = {
   person: true,
@@ -234,6 +235,7 @@ export class PartiesService {
         sourceEntityType: "Party",
         sourceEntityId: id,
       });
+      if (dto.addresses) await markCreditReportsForPartyReview(tx, { tenantId, partyId: id, reasonCode: "ADDRESS_CHANGED", actorMembershipId: this.tenantContext.getStaffContext().tenantMembershipId });
       return party;
     });
   }

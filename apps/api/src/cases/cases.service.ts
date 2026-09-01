@@ -20,6 +20,7 @@ import { allocateCaseNumber } from "./case-number.service";
 import { CreateCaseDto } from "./dto/create-case.dto";
 import { QueryCasesDto } from "./dto/query-cases.dto";
 import { UpdateCaseDto } from "./dto/update-case.dto";
+import { markCreditReportsForCaseReview } from "../credit-reporting/credit-report-state";
 
 const partyDetailInclude = {
   person: true,
@@ -239,6 +240,7 @@ export class CasesService {
             currency: dto.claim.currency?.toUpperCase(),
             description: dto.claim.description,
             status: dto.claim.status,
+            disputeStatus: dto.claim.disputeStatus,
           },
         });
         await this.activity.recordStaffEvent(tx, this.tenantContext.getStaffContext().tenantMembershipId, {
@@ -251,6 +253,7 @@ export class CasesService {
           sourceEntityType: "Claim",
           sourceEntityId: existing.claim.id,
         });
+        await markCreditReportsForCaseReview(tx, { tenantId, caseId: id, reasonCode: "CLAIM_CHANGED", actorMembershipId: this.tenantContext.getStaffContext().tenantMembershipId });
       }
 
       await tx.case.update({
@@ -366,6 +369,7 @@ export class CasesService {
         sourceEntityType: "Case",
         sourceEntityId: id,
       });
+      await markCreditReportsForCaseReview(tx, { tenantId, caseId: id, reasonCode: "CASE_STATUS_CHANGED", actorMembershipId: this.tenantContext.getStaffContext().tenantMembershipId });
     });
     return this.getCase(id, tenantId, true);
   }

@@ -111,6 +111,9 @@ const standardPermissions = [
   ["privacy", "export", PermissionScope.TENANT, "Betroffenenauskünfte exportieren"],
   ["address-research", "read", PermissionScope.TENANT, "Adressermittlungen anzeigen"],
   ["address-research", "manage", PermissionScope.TENANT, "Adressermittlungen bearbeiten"],
+  ["credit-report", "read", PermissionScope.TENANT, "Auskunfteiprüfungen anzeigen"],
+  ["credit-report", "manage", PermissionScope.TENANT, "Auskunfteiprüfungen bearbeiten"],
+  ["credit-report", "approve", PermissionScope.TENANT, "Auskunfteiprüfungen freigeben"],
 ];
 
 const systemRoles = [
@@ -149,6 +152,8 @@ const systemRoles = [
       "report:read",
       "address-research:read",
       "address-research:manage",
+      "credit-report:read",
+      "credit-report:manage",
     ],
   },
   {
@@ -176,6 +181,9 @@ const systemRoles = [
       "report:read",
       "address-research:read",
       "address-research:manage",
+      "credit-report:read",
+      "credit-report:manage",
+      "credit-report:approve",
     ],
   },
   {
@@ -191,6 +199,7 @@ const systemRoles = [
       "bank-import:manage",
       "document:read",
       "report:read",
+      "credit-report:read",
     ],
   },
   {

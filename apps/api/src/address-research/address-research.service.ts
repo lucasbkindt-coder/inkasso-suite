@@ -13,6 +13,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import { TenantContextService } from "../tenant/tenant-context.service";
 import { AddAddressResearchResultDto, CreateAddressResearchDto, QueryAddressResearchDto } from "./dto";
 import { AddressResearchProviderService } from "./providers/address-research-provider.service";
+import { markCreditReportsForPartyReview } from "../credit-reporting/credit-report-state";
 
 const detailInclude = {
   party: { select: { id: true, displayName: true, processingRestrictedAt: true, addresses: { where: { deletedAt: null }, orderBy: [{ isPrimary: "desc" }, { createdAt: "desc" }] } } },
@@ -168,6 +169,7 @@ export class AddressResearchService {
       await tx.addressResearchRequest.update({ where: { id: item.id }, data: { selectedResultId: result.id, status: AddressResearchStatus.APPLIED, completedAt: new Date() } });
       await this.activity.recordStaffEvent(tx, actorId, { tenantId, partyId: item.partyId, caseId: item.caseId ?? undefined, eventType: ActivityEventType.ADDRESS_RESEARCH_RESULT_SELECTED, sourceEntityType: "AddressResearchResult", sourceEntityId: result.id, metadata: { requestId: item.id } });
       await this.activity.recordStaffEvent(tx, actorId, { tenantId, partyId: item.partyId, caseId: item.caseId ?? undefined, eventType: ActivityEventType.ADDRESS_RESEARCH_ADDRESS_APPLIED, description: sameAddress ? "Bestehende Anschrift wurde bestätigt." : "Neue Anschrift wurde kontrolliert übernommen.", sourceEntityType: "AddressResearchResult", sourceEntityId: result.id, metadata: { requestId: item.id, sameAddress } });
+      if (!sameAddress) await markCreditReportsForPartyReview(tx, { tenantId, partyId: item.partyId, reasonCode: "ADDRESS_CHANGED", actorMembershipId: actorId });
       return { sameAddress, request: await tx.addressResearchRequest.findUniqueOrThrow({ where: { id: item.id }, include: detailInclude }) };
     }).then(({ sameAddress, request }) => ({ sameAddress, request: this.serialize(request) }));
   }
