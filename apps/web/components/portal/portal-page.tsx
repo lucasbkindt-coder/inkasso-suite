@@ -11,6 +11,25 @@ import { portalClientApi } from "@/lib/portal-client-api";
 import { installmentRequestStatusLabels, type InstallmentRequest } from "@/types/installment-request";
 import { installmentPlanItemStatusLabels, installmentPlanStatusLabels, type InstallmentPlan } from "@/types/installment-plan";
 type Data = Record<string, unknown>;
+const clientCaseStatusLabels: Record<string, string> = {
+  OPEN: "Aktiv",
+  CLOSED: "Erledigt",
+  CANCELLED: "Storniert",
+};
+
+function ClientCaseStatus({ status }: { status: unknown }) {
+  const value = String(status);
+  const cancelled = value === "CANCELLED";
+  return (
+    <span
+      className={cancelled
+        ? "inline-flex rounded-full border border-slate-300 bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+        : "inline-flex rounded-full border bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground"}
+    >
+      {clientCaseStatusLabels[value] ?? value}
+    </span>
+  );
+}
 function usePreviewToken() {
   const params = useSearchParams();
   const previewFromRouter = params.get("preview");
@@ -169,15 +188,19 @@ function Cases({ items, token }: { items: Data[]; token: string }) {
             href={`/portal/mandant/akten/${item.id}${token ? `?preview=${token}` : ""}`}
             key={String(item.id)}
           >
-            <p className="font-medium">
-              {String(item.caseNumber)} · {String((item.debtorParty as Data).displayName)}
-            </p>
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <p className="font-medium">
+                {String(item.caseNumber)} · {String((item.debtorParty as Data).displayName)}
+              </p>
+              <ClientCaseStatus status={item.status} />
+            </div>
             <p className="mt-1 text-sm text-muted-foreground">
-              Rechnung: {String((item.claim as Data | null)?.invoiceNumber ?? "—")} ·{" "}
+              {item.status === "CANCELLED" ? "Zuletzt geführte Hauptforderung" : "Hauptforderung"}: {" "}
               {formatCurrency(
                 String((item.claim as Data | null)?.principalAmount ?? "0"),
                 String((item.claim as Data | null)?.currency ?? "EUR"),
               )}
+              {" · Rechnung: "}{String((item.claim as Data | null)?.invoiceNumber ?? "—")}
             </p>
           </Link>
         ))}
@@ -189,10 +212,22 @@ function CaseDetail({ data, token }: { data: Data; token: string }) {
   const claim = data.claim as Data | null;
   const ledger = data.ledger as Data;
   const documents = data.documents as Data[];
+  const cancelled = data.status === "CANCELLED";
   return (
     <>
-      <h1 className="text-3xl font-semibold">{String(data.caseNumber)}</h1>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-3xl font-semibold">{String(data.caseNumber)}</h1>
+        <ClientCaseStatus status={data.status} />
+      </div>
+      {cancelled ? (
+        <p className="mt-4 rounded-lg border bg-muted/40 p-3 text-sm text-muted-foreground">
+          Dieser Vorgang wurde storniert und wird nicht weiter bearbeitet. Die angezeigten Beträge
+          dokumentieren den zuletzt geführten Stand.
+        </p>
+      ) : null}
       <dl className="mt-6 grid gap-3 rounded-xl border bg-card p-5 sm:grid-cols-2">
+        <dt>Status</dt>
+        <dd>{clientCaseStatusLabels[String(data.status)] ?? String(data.status)}</dd>
         <dt>Schuldner</dt>
         <dd>{String((data.debtorParty as Data).displayName)}</dd>
         <dt>Rechnungsnummer</dt>
@@ -201,7 +236,7 @@ function CaseDetail({ data, token }: { data: Data; token: string }) {
         <dd>
           {formatCurrency(String(claim?.principalAmount ?? "0"), String(claim?.currency ?? "EUR"))}
         </dd>
-        <dt>Offener Betrag</dt>
+        <dt>{cancelled ? "Zuletzt geführter Stand" : "Offener Betrag"}</dt>
         <dd>{formatCurrency(String(ledger.totalOpen), "EUR")}</dd>
       </dl>
       <h2 className="mt-6 text-xl font-semibold">Freigegebene Dokumente</h2>
@@ -339,6 +374,6 @@ function InstallmentSection({caseId,openAmount,previewToken,requests}:{caseId:st
 }
 function AuthenticatedHeader({ session }: { session: import("@/lib/portal-auth-api").PortalSession }) {
   const [pending, setPending] = React.useState(false);
-  const logout = async () => { setPending(true); try { await portalAuthApi.logoutPortal(); window.location.assign("/portal/login"); } catch { setPending(false); } };
+  const logout = async () => { setPending(true); try { await portalAuthApi.logoutPortal(); window.location.assign("/"); } catch { setPending(false); } };
   return <div className="border-b bg-muted/30"><div className="mx-auto flex max-w-6xl items-center justify-between p-3 text-sm"><span>{session.portalType === "CLIENT" && session.clientContactName ? `Angemeldet als ${session.clientContactName}` : "Angemeldeter Portalzugang"}</span><button className="font-medium text-primary hover:underline disabled:opacity-60" disabled={pending} onClick={() => void logout()} type="button">Abmelden</button></div></div>;
 }

@@ -14,7 +14,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     credentials: "include",
     headers: { "content-type": "application/json", ...init?.headers },
   });
-  if (response.ok) return (await response.json()) as T;
+  if (response.ok) return (response.status === 204 ? undefined : await response.json()) as T;
   const payload = (await response.json().catch(() => ({}))) as PortalAuthError;
   const detail = Array.isArray(payload.message) ? payload.message.join(" ") : payload.message;
   if (response.status === 401) throw new Error("Anmeldedaten ungültig oder Sitzung abgelaufen.");
