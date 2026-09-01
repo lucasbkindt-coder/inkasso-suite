@@ -315,7 +315,7 @@ export class DataSubjectRequestsService {
     });
     const caseIds = cases.map(({ id }) => id);
     const caseWhere = { tenantId: item.tenantId, caseId: { in: caseIds } };
-    const [addresses, addressResearch, creditReporting, contacts, ledger, paymentAllocations, tasks, documents, communications, installmentRequests, installmentPlans, portalAccounts, enforcementTitles, enforcementActions, activity] = await Promise.all([
+    const [addresses, addressResearch, creditReporting, contacts, ledger, paymentAllocations, tasks, documents, communications, deskTickets, installmentRequests, installmentPlans, portalAccounts, enforcementTitles, enforcementActions, activity] = await Promise.all([
       this.prisma.address.findMany({ where: { partyId: party.id, deletedAt: null }, select: { street: true, houseNumber: true, postalCode: true, city: true, country: true } }),
       this.prisma.addressResearchRequest.findMany({
         where: { tenantId: item.tenantId, partyId: party.id },
@@ -341,6 +341,7 @@ export class DataSubjectRequestsService {
       this.prisma.caseTask.findMany({ where: caseWhere, select: { caseId: true, type: true, status: true, priority: true, title: true, description: true, dueAt: true, followUpAt: true, completedAt: true, cancelledAt: true } }),
       this.prisma.caseDocument.findMany({ where: caseWhere, select: { caseId: true, type: true, status: true, portalVisibility: true, filename: true, mimeType: true, renderedSubject: true, renderedBody: true, generatedAt: true, sentAt: true, voidedAt: true } }),
       this.prisma.communicationEvent.findMany({ where: { tenantId: item.tenantId, partyId: party.id }, select: { occurredAt: true, direction: true, channel: true, subject: true, summary: true, attachments: { select: { originalFileName: true, mimeType: true, size: true, sha256: true, createdAt: true } } } }),
+      this.prisma.deskTicket.findMany({ where: { tenantId: item.tenantId, partyId: party.id }, select: { number: true, subject: true, status: true, priority: true, category: true, createdAt: true, updatedAt: true, closedAt: true }, orderBy: { createdAt: "asc" } }),
       this.prisma.installmentRequest.findMany({ where: { tenantId: item.tenantId, debtorPartyId: party.id }, select: { caseId: true, status: true, requestedMonthlyAmount: true, preferredStartDate: true, numberOfInstallments: true, debtorMessage: true, submittedAt: true, reviewedAt: true, approvedAt: true, rejectedAt: true } }),
       this.prisma.installmentPlan.findMany({ where: { tenantId: item.tenantId, debtorPartyId: party.id }, select: { caseId: true, source: true, status: true, initialOpenAmount: true, plannedInstallmentAmount: true, startDate: true, numberOfInstallments: true, activatedAt: true, completedAt: true, cancelledAt: true, items: { select: { sequenceNumber: true, dueDate: true, plannedAmount: true, status: true, completedAt: true } } } }),
       this.prisma.portalAccount.findMany({ where: { tenantId: item.tenantId, partyId: party.id }, select: { portalType: true, status: true, loginIdentifier: true, activatedAt: true, lastLoginAt: true, createdAt: true } }),
@@ -348,6 +349,6 @@ export class DataSubjectRequestsService {
       this.prisma.enforcementAction.findMany({ where: caseWhere, select: { caseId: true, type: true, status: true, requestedAt: true, completedAt: true, referenceNumber: true, amountAtRequest: true, notes: true } }),
       this.prisma.activityEvent.findMany({ where: { tenantId: item.tenantId, OR: [{ partyId: party.id }, { caseId: { in: caseIds } }] }, select: { eventType: true, title: true, description: true, createdAt: true }, orderBy: { createdAt: "asc" } }),
     ]);
-    return { version: 1, generatedAt: new Date().toISOString(), subject: { type: "PARTY", displayName: party.displayName, partyType: party.type, addresses, addressResearch, creditReporting, contacts, portalAccounts }, cases, ledger, paymentAllocations, tasks, documents, communications, installmentRequests, installmentPlans, enforcementTitles, enforcementActions, activity, dataOrigin: "nicht strukturiert im System gespeichert", recipients: "nicht strukturiert im System gespeichert" };
+    return { version: 1, generatedAt: new Date().toISOString(), subject: { type: "PARTY", displayName: party.displayName, partyType: party.type, addresses, addressResearch, creditReporting, contacts, portalAccounts }, cases, ledger, paymentAllocations, tasks, documents, communications, deskTickets, installmentRequests, installmentPlans, enforcementTitles, enforcementActions, activity, dataOrigin: "nicht strukturiert im System gespeichert", recipients: "nicht strukturiert im System gespeichert" };
   }
 }

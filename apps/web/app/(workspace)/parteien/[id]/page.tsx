@@ -15,6 +15,7 @@ import { ClientContacts } from "@/components/parties/client-contacts";
 import { AddressResearchPanel } from "@/components/address-research/address-research-panel";
 import { CreditReportPanel } from "@/components/credit-reporting/credit-report-panel";
 import { ZohoPartyPanel } from "@/components/integrations/zoho-party-panel";
+import { DeskTicketPanel } from "@/components/desk/desk-ticket-panel";
 const API = "/api";
 type Party = {
   id: string;
@@ -161,6 +162,7 @@ export default function PartyDetailPage() {
       {party.roles.some((role) => role.role === "DEBTOR") ? <CommunicationPanel cases={cases} partyId={party.id} /> : null}
       {party.roles.some((role) => role.role === "DEBTOR") ? <AddressResearchPanel compact partyId={party.id} /> : null}
       {party.roles.some((role) => role.role === "DEBTOR") ? <CreditReportPanel compact partyId={party.id} /> : null}
+      <DeskTicketPanel partyId={party.id} />
       <ZohoPartyPanel partyId={party.id} />
       <ActivityList load={(page) => partyApi.activities(id, page)} />
       <PartyDialog

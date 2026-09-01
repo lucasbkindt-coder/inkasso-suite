@@ -8,6 +8,7 @@ import {
   ActivityEventType,
   CommunicationAttachmentType,
   CommunicationChannel,
+  CommunicationDirection,
   PartyRoleType,
   Prisma,
 } from "@prisma/client";
@@ -172,6 +173,7 @@ export class CommunicationsService {
     this.staff.requirePermission(actor, "debtor:update");
     const existing = await this.prisma.communicationEvent.findFirst({ where: { id, tenantId }, include: this.include() });
     if (!existing) throw new NotFoundException("Kommunikation wurde nicht gefunden.");
+    if (!existing.partyId) throw new NotFoundException("Parteikommunikation wurde nicht gefunden.");
     const caseId = dto.caseId === undefined ? existing.caseId : dto.caseId;
     await this.assertCase(caseId, existing.partyId, tenantId);
     const updated = await this.prisma.$transaction(async (tx) => {
@@ -186,7 +188,7 @@ export class CommunicationsService {
       });
       await this.activity.recordStaffEvent(tx, actor.tenantMembershipId, {
         tenantId,
-        partyId: item.partyId,
+        partyId: item.partyId ?? undefined,
         caseId: item.caseId ?? undefined,
         eventType: ActivityEventType.COMMUNICATION_UPDATED,
         metadata: { communicationId: item.id },
@@ -309,8 +311,9 @@ export class CommunicationsService {
     }
   }
 
-  private activityTitle(direction: "INBOUND" | "OUTBOUND", channel: CommunicationChannel) {
-    const label: Record<CommunicationChannel, string> = { PHONE: "Telefonkontakt", EMAIL: "E-Mail", LETTER: "Brief", PORTAL: "Portalnachricht", IN_PERSON: "Persönliches Gespräch", OTHER: "Kontakt" };
-    return `${direction === "INBOUND" ? "Eingehender" : "Ausgehender"} ${label[channel]} erfasst`;
+  private activityTitle(direction: CommunicationDirection, channel: CommunicationChannel) {
+    const label: Record<CommunicationChannel, string> = { PHONE: "Telefonkontakt", EMAIL: "E-Mail", LETTER: "Brief", PORTAL: "Portalnachricht", IN_PERSON: "Persönliches Gespräch", INTERNAL: "interne Notiz", OTHER: "Kontakt" };
+    if (direction === CommunicationDirection.INTERNAL) return `${label[channel]} erfasst`;
+    return `${direction === CommunicationDirection.INBOUND ? "Eingehender" : "Ausgehender"} ${label[channel]} erfasst`;
   }
 }

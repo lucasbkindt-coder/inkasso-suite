@@ -5,7 +5,7 @@
   "packageManager": "pnpm@10.13.1",
   "scripts": {
     "build": "pnpm --recursive run build",
-    "dev": "pnpm --parallel --filter @inkasso/web --filter @inkasso/api run dev",
+    "dev": "pnpm --parallel --filter @inkasso/web --filter @inkasso/api --filter @inkasso/desk run dev",
     "db:generate": "pnpm --filter @inkasso/database run generate",
     "db:migrate": "pnpm --filter @inkasso/database run migrate",
     "db:seed": "pnpm --filter @inkasso/database run seed",

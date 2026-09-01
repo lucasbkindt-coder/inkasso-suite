@@ -116,6 +116,9 @@ const standardPermissions = [
   ["credit-report", "approve", PermissionScope.TENANT, "Auskunfteiprüfungen freigeben"],
   ["integration", "read", PermissionScope.TENANT, "Integrationen anzeigen"],
   ["integration", "manage", PermissionScope.TENANT, "Integrationen verwalten"],
+  ["desk", "read", PermissionScope.TENANT, "Desk-Tickets anzeigen"],
+  ["desk", "manage", PermissionScope.TENANT, "Desk-Tickets bearbeiten"],
+  ["desk", "assign", PermissionScope.TENANT, "Desk-Tickets zuweisen"],
 ];
 
 const systemRoles = [
@@ -156,6 +159,8 @@ const systemRoles = [
       "address-research:manage",
       "credit-report:read",
       "credit-report:manage",
+      "desk:read",
+      "desk:manage",
     ],
   },
   {
@@ -187,6 +192,9 @@ const systemRoles = [
       "credit-report:manage",
       "credit-report:approve",
       "integration:read",
+      "desk:read",
+      "desk:manage",
+      "desk:assign",
     ],
   },
   {

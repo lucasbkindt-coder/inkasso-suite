@@ -1,6 +1,7 @@
 generator client {
   provider = "prisma-client-js"
 }
+
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
@@ -412,6 +413,21 @@ enum TaskPriority {
   URGENT
 }
 
+enum DeskTicketStatus {
+  OPEN
+  PENDING
+  WAITING
+  RESOLVED
+  CLOSED
+}
+
+enum DeskTicketPriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
 enum InstallmentRequestStatus {
   SUBMITTED
   UNDER_REVIEW
@@ -532,11 +548,19 @@ enum ActivityEventType {
   TITLE_SATISFIED
   ENFORCEMENT_ACTION_CREATED
   ENFORCEMENT_ACTION_STATUS_CHANGED
+  DESK_TICKET_CREATED
+  DESK_TICKET_STATUS_CHANGED
+  DESK_TICKET_PRIORITY_CHANGED
+  DESK_TICKET_ASSIGNEE_CHANGED
+  DESK_TICKET_PARTY_LINKED
+  DESK_TICKET_CASE_LINKED
+  DESK_TICKET_COMMENT_ADDED
 }
 
 enum CommunicationDirection {
   INBOUND
   OUTBOUND
+  INTERNAL
 }
 
 enum CommunicationChannel {
@@ -545,6 +569,7 @@ enum CommunicationChannel {
   LETTER
   PORTAL
   IN_PERSON
+  INTERNAL
   OTHER
 }
 
@@ -583,7 +608,7 @@ model User {
   updatedAt          DateTime  @updatedAt
   deletedAt          DateTime?
 
-  memberships TenantMembership[]
+  memberships   TenantMembership[]
   staffSessions StaffSession[]
 
   @@index([deletedAt])
@@ -660,90 +685,93 @@ model Tenant {
   updatedAt DateTime  @updatedAt
   deletedAt DateTime?
 
-  memberships        TenantMembership[]
-  teams              Team[]
-  roles              Role[]
-  debtors            Debtor[]
-  parties            Party[]
-  cases              Case[]
-  claims             Claim[]
-  sequences          CaseNumberSequence[]
-  ledgerEntries      CaseLedgerEntry[]
-  costCalculations   CaseCostCalculation[]
-  paymentAllocations PaymentAllocation[]
-  documentTemplates  DocumentTemplate[]
-  documents          CaseDocument[]
-  documentDeliveries DocumentDelivery[]
-  documentSettings   TenantDocumentSettings?
-  tasks              CaseTask[]
-  clientSubmissions ClientSubmission[]
-  portalAccounts     PortalAccount[]
-  clientContacts     ClientContact[]
-  dataSubjectRequests DataSubjectRequest[]
+  memberships              TenantMembership[]
+  teams                    Team[]
+  roles                    Role[]
+  debtors                  Debtor[]
+  parties                  Party[]
+  cases                    Case[]
+  claims                   Claim[]
+  sequences                CaseNumberSequence[]
+  ledgerEntries            CaseLedgerEntry[]
+  costCalculations         CaseCostCalculation[]
+  paymentAllocations       PaymentAllocation[]
+  documentTemplates        DocumentTemplate[]
+  documents                CaseDocument[]
+  documentDeliveries       DocumentDelivery[]
+  documentSettings         TenantDocumentSettings?
+  tasks                    CaseTask[]
+  clientSubmissions        ClientSubmission[]
+  portalAccounts           PortalAccount[]
+  clientContacts           ClientContact[]
+  dataSubjectRequests      DataSubjectRequest[]
   dataSubjectAccessExports DataSubjectAccessExport[]
-  dataSubjectDataReviews DataSubjectDataReview[]
-  installmentRequests InstallmentRequest[]
-  installmentPlans    InstallmentPlan[]
-  installmentPlanItems InstallmentPlanItem[]
-  staffSessions       StaffSession[]
-  activityEvents      ActivityEvent[]
-  enforcementTitles   EnforcementTitle[]
-  enforcementActions  EnforcementAction[]
-  communications      CommunicationEvent[]
+  dataSubjectDataReviews   DataSubjectDataReview[]
+  installmentRequests      InstallmentRequest[]
+  installmentPlans         InstallmentPlan[]
+  installmentPlanItems     InstallmentPlanItem[]
+  staffSessions            StaffSession[]
+  activityEvents           ActivityEvent[]
+  enforcementTitles        EnforcementTitle[]
+  enforcementActions       EnforcementAction[]
+  communications           CommunicationEvent[]
   communicationAttachments CommunicationAttachment[]
-  bankImports         BankImport[]
-  bankTransactions    BankTransaction[]
-  addressResearchRequests AddressResearchRequest[]
-  addressResearchResults AddressResearchResult[]
-  creditBureauReports CreditBureauReport[]
+  bankImports              BankImport[]
+  bankTransactions         BankTransaction[]
+  addressResearchRequests  AddressResearchRequest[]
+  addressResearchResults   AddressResearchResult[]
+  creditBureauReports      CreditBureauReport[]
   creditBureauReportEvents CreditBureauReportEvent[]
   externalIntegrationLinks ExternalIntegrationLink[]
+  deskTickets              DeskTicket[]
+  deskTicketSequences      DeskTicketNumberSequence[]
 
   @@index([deletedAt])
 }
 
 model Case {
-  id                 String                @id @default(uuid()) @db.Uuid
-  tenantId           String                @db.Uuid
-  caseNumber         String
-  sequenceYear       Int
-  sequenceNumber     Int
-  clientPartyId      String                @db.Uuid
-  debtorPartyId      String                @db.Uuid
-  ownerMembershipId  String?               @db.Uuid
-  assignedMembershipId String?             @db.Uuid
-  status             CaseStatus            @default(OPEN)
-  phase              CasePhase             @default(NEW)
-  priority           CasePriority          @default(NORMAL)
-  openedAt           DateTime              @default(now())
-  closedAt           DateTime?
-  internalNotes      String?
-  createdAt          DateTime              @default(now())
-  updatedAt          DateTime              @updatedAt
-  deletedAt          DateTime?
-  tenant             Tenant                @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-  clientParty        Party                 @relation("CaseClient", fields: [clientPartyId], references: [id], onDelete: Restrict)
-  debtorParty        Party                 @relation("CaseDebtor", fields: [debtorPartyId], references: [id], onDelete: Restrict)
-  ownerMembership    TenantMembership?     @relation(fields: [ownerMembershipId], references: [id], onDelete: Restrict)
-  assignedMembership TenantMembership?     @relation("AssignedCases", fields: [assignedMembershipId], references: [id], onDelete: Restrict)
-  claim              Claim?
-  ledgerEntries      CaseLedgerEntry[]
-  costCalculations   CaseCostCalculation[]
-  paymentAllocations PaymentAllocation[]
-  documents          CaseDocument[]
-  documentDeliveries DocumentDelivery[]
-  tasks              CaseTask[]
-  acceptedSubmissions ClientSubmission[] @relation("AcceptedSubmissionCase")
-  installmentRequests InstallmentRequest[]
-  installmentPlans    InstallmentPlan[]
-  activityEvents      ActivityEvent[]
-  enforcementTitles   EnforcementTitle[]
-  enforcementActions  EnforcementAction[]
-  communications      CommunicationEvent[]
-  bankTransactions     BankTransaction[]
-  addressResearchRequests AddressResearchRequest[]
-  creditBureauReports CreditBureauReport[]
+  id                       String                    @id @default(uuid()) @db.Uuid
+  tenantId                 String                    @db.Uuid
+  caseNumber               String
+  sequenceYear             Int
+  sequenceNumber           Int
+  clientPartyId            String                    @db.Uuid
+  debtorPartyId            String                    @db.Uuid
+  ownerMembershipId        String?                   @db.Uuid
+  assignedMembershipId     String?                   @db.Uuid
+  status                   CaseStatus                @default(OPEN)
+  phase                    CasePhase                 @default(NEW)
+  priority                 CasePriority              @default(NORMAL)
+  openedAt                 DateTime                  @default(now())
+  closedAt                 DateTime?
+  internalNotes            String?
+  createdAt                DateTime                  @default(now())
+  updatedAt                DateTime                  @updatedAt
+  deletedAt                DateTime?
+  tenant                   Tenant                    @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  clientParty              Party                     @relation("CaseClient", fields: [clientPartyId], references: [id], onDelete: Restrict)
+  debtorParty              Party                     @relation("CaseDebtor", fields: [debtorPartyId], references: [id], onDelete: Restrict)
+  ownerMembership          TenantMembership?         @relation(fields: [ownerMembershipId], references: [id], onDelete: Restrict)
+  assignedMembership       TenantMembership?         @relation("AssignedCases", fields: [assignedMembershipId], references: [id], onDelete: Restrict)
+  claim                    Claim?
+  ledgerEntries            CaseLedgerEntry[]
+  costCalculations         CaseCostCalculation[]
+  paymentAllocations       PaymentAllocation[]
+  documents                CaseDocument[]
+  documentDeliveries       DocumentDelivery[]
+  tasks                    CaseTask[]
+  acceptedSubmissions      ClientSubmission[]        @relation("AcceptedSubmissionCase")
+  installmentRequests      InstallmentRequest[]
+  installmentPlans         InstallmentPlan[]
+  activityEvents           ActivityEvent[]
+  enforcementTitles        EnforcementTitle[]
+  enforcementActions       EnforcementAction[]
+  communications           CommunicationEvent[]
+  bankTransactions         BankTransaction[]
+  addressResearchRequests  AddressResearchRequest[]
+  creditBureauReports      CreditBureauReport[]
   externalIntegrationLinks ExternalIntegrationLink[]
+  deskTickets              DeskTicket[]
 
   @@unique([tenantId, caseNumber])
   @@unique([tenantId, sequenceYear, sequenceNumber])
@@ -776,9 +804,9 @@ model EnforcementTitle {
   createdAt             DateTime               @default(now())
   updatedAt             DateTime               @updatedAt
 
-  tenant              Tenant           @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-  case                Case             @relation(fields: [caseId], references: [id], onDelete: Restrict)
-  createdByMembership TenantMembership @relation("EnforcementTitleCreatedBy", fields: [createdByMembershipId], references: [id], onDelete: Restrict)
+  tenant              Tenant              @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  case                Case                @relation(fields: [caseId], references: [id], onDelete: Restrict)
+  createdByMembership TenantMembership    @relation("EnforcementTitleCreatedBy", fields: [createdByMembershipId], references: [id], onDelete: Restrict)
   actions             EnforcementAction[]
 
   @@index([tenantId, caseId, status])
@@ -1002,63 +1030,63 @@ model DocumentTemplate {
 }
 
 model TenantDocumentSettings {
-  id                 String   @id @default(uuid()) @db.Uuid
-  tenantId           String   @unique @db.Uuid
-  companyName        String
-  legalName          String?
-  street             String
-  houseNumber        String?
-  postalCode         String
-  city               String
-  country            String   @default("DE") @db.Char(2)
-  phone              String?
-  mobile             String?
-  fax                String?
-  email              String?
-  website            String?
-  registrationCourt  String?
-  registrationNumber String?
-  vatId              String?
-  managingDirector   String?
-  iban               String?
-  bic                String?
-  bankName           String?
-  creditorId         String?
+  id                              String   @id @default(uuid()) @db.Uuid
+  tenantId                        String   @unique @db.Uuid
+  companyName                     String
+  legalName                       String?
+  street                          String
+  houseNumber                     String?
+  postalCode                      String
+  city                            String
+  country                         String   @default("DE") @db.Char(2)
+  phone                           String?
+  mobile                          String?
+  fax                             String?
+  email                           String?
+  website                         String?
+  registrationCourt               String?
+  registrationNumber              String?
+  vatId                           String?
+  managingDirector                String?
+  iban                            String?
+  bic                             String?
+  bankName                        String?
+  creditorId                      String?
   collectionRegistrationAuthority String?
   collectionRegistrationAddress   String?
   collectionRegistrationContact   String?
-  documentFooter     String?
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
-  tenant             Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  documentFooter                  String?
+  createdAt                       DateTime @default(now())
+  updatedAt                       DateTime @updatedAt
+  tenant                          Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
 }
 
 model CaseDocument {
-  id                    String         @id @default(uuid()) @db.Uuid
-  tenantId              String         @db.Uuid
-  caseId                String         @db.Uuid
-  templateId            String?        @db.Uuid
+  id                    String           @id @default(uuid()) @db.Uuid
+  tenantId              String           @db.Uuid
+  caseId                String           @db.Uuid
+  templateId            String?          @db.Uuid
   type                  DocumentType
-  status                DocumentStatus @default(DRAFT)
+  status                DocumentStatus   @default(DRAFT)
   portalVisibility      PortalVisibility @default(INTERNAL)
   filename              String
-  mimeType              String         @default("application/pdf")
+  mimeType              String           @default("application/pdf")
   storageKey            String
   templateVersion       Int?
   renderedSubject       String?
   renderedBody          String
   dataSnapshot          Json
-  generatedAt           DateTime       @default(now())
+  generatedAt           DateTime         @default(now())
   sentAt                DateTime?
   voidedAt              DateTime?
-  createdByMembershipId String?        @db.Uuid
-  createdAt             DateTime       @default(now())
-  updatedAt             DateTime       @updatedAt
+  createdByMembershipId String?          @db.Uuid
+  createdAt             DateTime         @default(now())
+  updatedAt             DateTime         @updatedAt
 
-  tenant              Tenant            @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-  case                Case              @relation(fields: [caseId], references: [id], onDelete: Restrict)
-  template            DocumentTemplate? @relation(fields: [templateId], references: [id], onDelete: Restrict)
-  createdByMembership TenantMembership? @relation(fields: [createdByMembershipId], references: [id], onDelete: Restrict)
+  tenant              Tenant             @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  case                Case               @relation(fields: [caseId], references: [id], onDelete: Restrict)
+  template            DocumentTemplate?  @relation(fields: [templateId], references: [id], onDelete: Restrict)
+  createdByMembership TenantMembership?  @relation(fields: [createdByMembershipId], references: [id], onDelete: Restrict)
   deliveries          DocumentDelivery[]
 
   @@index([tenantId, caseId, generatedAt])
@@ -1067,12 +1095,12 @@ model CaseDocument {
 }
 
 model DocumentDelivery {
-  id                String                @id @default(uuid()) @db.Uuid
-  tenantId          String                @db.Uuid
-  documentId        String                @db.Uuid
-  caseId            String                @db.Uuid
+  id                String                  @id @default(uuid()) @db.Uuid
+  tenantId          String                  @db.Uuid
+  documentId        String                  @db.Uuid
+  caseId            String                  @db.Uuid
   channel           DocumentDeliveryChannel
-  status            DocumentDeliveryStatus @default(PENDING)
+  status            DocumentDeliveryStatus  @default(PENDING)
   recipient         String?
   subject           String
   attemptedAt       DateTime?
@@ -1082,8 +1110,8 @@ model DocumentDelivery {
   providerMessageId String?
   errorCode         String?
   errorMessage      String?
-  createdAt         DateTime              @default(now())
-  updatedAt         DateTime              @updatedAt
+  createdAt         DateTime                @default(now())
+  updatedAt         DateTime                @updatedAt
 
   tenant   Tenant       @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   case     Case         @relation(fields: [caseId], references: [id], onDelete: Restrict)
@@ -1123,70 +1151,71 @@ model CaseTask {
 }
 
 model ClientSubmission {
-  id String @id @default(uuid()) @db.Uuid
-  tenantId String @db.Uuid
-  clientPartyId String @db.Uuid
-  status ClientSubmissionStatus @default(SUBMITTED)
-  reference String?
-  debtorType PartyType
-  debtorFirstName String?
-  debtorLastName String?
-  debtorCompanyName String?
-  debtorStreet String
-  debtorHouseNumber String?
-  debtorPostalCode String
-  debtorCity String
-  debtorCountry String @default("DE") @db.Char(2)
-  debtorEmail String?
-  debtorPhone String?
-  invoiceNumber String?
-  invoiceDate DateTime? @db.Date
-  dueDate DateTime @db.Date
-  principalAmount Decimal @db.Decimal(15, 2)
-  currency String @default("EUR") @db.Char(3)
-  claimDescription String?
-  clientNote String?
-  submittedAt DateTime @default(now())
-  reviewedAt DateTime?
-  acceptedAt DateTime?
-  rejectedAt DateTime?
-  acceptedCaseId String? @unique @db.Uuid
-  reviewedByMembershipId String? @db.Uuid
-  rejectionReason String?
-  strongMatchOverride Boolean @default(false)
-  strongMatchCandidateIds Json?
+  id                        String                 @id @default(uuid()) @db.Uuid
+  tenantId                  String                 @db.Uuid
+  clientPartyId             String                 @db.Uuid
+  status                    ClientSubmissionStatus @default(SUBMITTED)
+  reference                 String?
+  debtorType                PartyType
+  debtorFirstName           String?
+  debtorLastName            String?
+  debtorCompanyName         String?
+  debtorStreet              String
+  debtorHouseNumber         String?
+  debtorPostalCode          String
+  debtorCity                String
+  debtorCountry             String                 @default("DE") @db.Char(2)
+  debtorEmail               String?
+  debtorPhone               String?
+  invoiceNumber             String?
+  invoiceDate               DateTime?              @db.Date
+  dueDate                   DateTime               @db.Date
+  principalAmount           Decimal                @db.Decimal(15, 2)
+  currency                  String                 @default("EUR") @db.Char(3)
+  claimDescription          String?
+  clientNote                String?
+  submittedAt               DateTime               @default(now())
+  reviewedAt                DateTime?
+  acceptedAt                DateTime?
+  rejectedAt                DateTime?
+  acceptedCaseId            String?                @unique @db.Uuid
+  reviewedByMembershipId    String?                @db.Uuid
+  rejectionReason           String?
+  strongMatchOverride       Boolean                @default(false)
+  strongMatchCandidateIds   Json?
   strongMatchOverrideReason String?
-  strongMatchOverrideAt DateTime?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  tenant Tenant @relation(fields:[tenantId], references:[id], onDelete:Restrict)
-  clientParty Party @relation(fields:[clientPartyId], references:[id], onDelete:Restrict)
-  acceptedCase Case? @relation("AcceptedSubmissionCase", fields:[acceptedCaseId], references:[id], onDelete:Restrict)
-  reviewedByMembership TenantMembership? @relation(fields:[reviewedByMembershipId], references:[id], onDelete:Restrict)
-  @@index([tenantId,status])
-  @@index([tenantId,clientPartyId])
+  strongMatchOverrideAt     DateTime?
+  createdAt                 DateTime               @default(now())
+  updatedAt                 DateTime               @updatedAt
+  tenant                    Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  clientParty               Party                  @relation(fields: [clientPartyId], references: [id], onDelete: Restrict)
+  acceptedCase              Case?                  @relation("AcceptedSubmissionCase", fields: [acceptedCaseId], references: [id], onDelete: Restrict)
+  reviewedByMembership      TenantMembership?      @relation(fields: [reviewedByMembershipId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId, status])
+  @@index([tenantId, clientPartyId])
   @@index([submittedAt])
   @@index([acceptedCaseId])
 }
 
 model Claim {
-  id              String      @id @default(uuid()) @db.Uuid
-  caseId          String      @unique @db.Uuid
-  tenantId        String      @db.Uuid
+  id              String             @id @default(uuid()) @db.Uuid
+  caseId          String             @unique @db.Uuid
+  tenantId        String             @db.Uuid
   invoiceNumber   String
-  invoiceDate     DateTime    @db.Date
-  dueDate         DateTime    @db.Date
-  defaultDate     DateTime?   @db.Date
-  principalAmount Decimal     @db.Decimal(15, 2)
-  currency        String      @default("EUR") @db.Char(3)
+  invoiceDate     DateTime           @db.Date
+  dueDate         DateTime           @db.Date
+  defaultDate     DateTime?          @db.Date
+  principalAmount Decimal            @db.Decimal(15, 2)
+  currency        String             @default("EUR") @db.Char(3)
   description     String?
-  status          ClaimStatus @default(OPEN)
+  status          ClaimStatus        @default(OPEN)
   disputeStatus   ClaimDisputeStatus @default(NONE)
-  createdAt       DateTime    @default(now())
-  updatedAt       DateTime    @updatedAt
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
   deletedAt       DateTime?
-  tenant          Tenant      @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-  case            Case        @relation(fields: [caseId], references: [id], onDelete: Restrict)
+  tenant          Tenant             @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  case            Case               @relation(fields: [caseId], references: [id], onDelete: Restrict)
 
   @@index([tenantId, status, deletedAt])
   @@index([tenantId, invoiceNumber])
@@ -1202,6 +1231,17 @@ model CaseNumberSequence {
   @@id([tenantId, year])
 }
 
+model DeskTicketNumberSequence {
+  tenantId   String   @db.Uuid
+  year       Int
+  lastNumber Int      @default(0)
+  updatedAt  DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+
+  @@id([tenantId, year])
+}
+
 model Party {
   id          String    @id @default(uuid()) @db.Uuid
   tenantId    String    @db.Uuid
@@ -1211,28 +1251,29 @@ model Party {
   updatedAt   DateTime  @updatedAt
   deletedAt   DateTime?
 
-  tenant      Tenant      @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-  person      Person?
-  company     Company?
-  roles       PartyRole[]
-  addresses   Address[]
-  contacts    Contact[]
-  clientContacts ClientContact[]
-  dataSubjectRequests DataSubjectRequest[] @relation("DataSubjectParty")
-  processingRestrictedAt DateTime?
+  tenant                      Tenant                    @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  person                      Person?
+  company                     Company?
+  roles                       PartyRole[]
+  addresses                   Address[]
+  contacts                    Contact[]
+  clientContacts              ClientContact[]
+  dataSubjectRequests         DataSubjectRequest[]      @relation("DataSubjectParty")
+  processingRestrictedAt      DateTime?
   processingRestrictionReason String?
-  clientCases Case[]      @relation("CaseClient")
-  debtorCases Case[]      @relation("CaseDebtor")
-  clientSubmissions ClientSubmission[]
-  portalAccounts     PortalAccount[]
-  installmentRequests InstallmentRequest[]
-  installmentPlans    InstallmentPlan[]
-  activityEvents      ActivityEvent[]
-  communications      CommunicationEvent[]
-  externalIntegrationLinks ExternalIntegrationLink[]
-  bankTransactions     BankTransaction[]
-  addressResearchRequests AddressResearchRequest[]
-  creditBureauReports CreditBureauReport[]
+  clientCases                 Case[]                    @relation("CaseClient")
+  debtorCases                 Case[]                    @relation("CaseDebtor")
+  clientSubmissions           ClientSubmission[]
+  portalAccounts              PortalAccount[]
+  installmentRequests         InstallmentRequest[]
+  installmentPlans            InstallmentPlan[]
+  activityEvents              ActivityEvent[]
+  communications              CommunicationEvent[]
+  externalIntegrationLinks    ExternalIntegrationLink[]
+  bankTransactions            BankTransaction[]
+  addressResearchRequests     AddressResearchRequest[]
+  creditBureauReports         CreditBureauReport[]
+  deskTickets                 DeskTicket[]
 
   @@index([tenantId, deletedAt, displayName])
   @@index([tenantId, type, deletedAt])
@@ -1289,13 +1330,13 @@ model InstallmentPlan {
   createdByMembershipId    String?               @db.Uuid
   cancelledByMembershipId  String?               @db.Uuid
 
-  tenant        Tenant             @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-  case          Case               @relation(fields: [caseId], references: [id], onDelete: Restrict)
-  debtorParty   Party              @relation(fields: [debtorPartyId], references: [id], onDelete: Restrict)
-  createdByMembership TenantMembership? @relation("CreatedInstallmentPlans", fields: [createdByMembershipId], references: [id], onDelete: Restrict)
-  cancelledByMembership TenantMembership? @relation("CancelledInstallmentPlans", fields: [cancelledByMembershipId], references: [id], onDelete: Restrict)
-  sourceRequest InstallmentRequest? @relation(fields: [sourceRequestId], references: [id], onDelete: Restrict)
-  items         InstallmentPlanItem[]
+  tenant                Tenant                @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  case                  Case                  @relation(fields: [caseId], references: [id], onDelete: Restrict)
+  debtorParty           Party                 @relation(fields: [debtorPartyId], references: [id], onDelete: Restrict)
+  createdByMembership   TenantMembership?     @relation("CreatedInstallmentPlans", fields: [createdByMembershipId], references: [id], onDelete: Restrict)
+  cancelledByMembership TenantMembership?     @relation("CancelledInstallmentPlans", fields: [cancelledByMembershipId], references: [id], onDelete: Restrict)
+  sourceRequest         InstallmentRequest?   @relation(fields: [sourceRequestId], references: [id], onDelete: Restrict)
+  items                 InstallmentPlanItem[]
 
   @@index([tenantId, caseId, status])
   @@index([tenantId, debtorPartyId, status])
@@ -1304,16 +1345,16 @@ model InstallmentPlan {
 }
 
 model InstallmentPlanItem {
-  id             String                   @id @default(uuid()) @db.Uuid
-  tenantId       String                   @db.Uuid
-  planId         String                   @db.Uuid
+  id             String                    @id @default(uuid()) @db.Uuid
+  tenantId       String                    @db.Uuid
+  planId         String                    @db.Uuid
   sequenceNumber Int
-  dueDate        DateTime                 @db.Date
-  plannedAmount  Decimal                  @db.Decimal(15, 2)
+  dueDate        DateTime                  @db.Date
+  plannedAmount  Decimal                   @db.Decimal(15, 2)
   status         InstallmentPlanItemStatus @default(OPEN)
   completedAt    DateTime?
-  createdAt      DateTime                 @default(now())
-  updatedAt      DateTime                 @updatedAt
+  createdAt      DateTime                  @default(now())
+  updatedAt      DateTime                  @updatedAt
 
   tenant Tenant          @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   plan   InstallmentPlan @relation(fields: [planId], references: [id], onDelete: Restrict)
@@ -1336,11 +1377,11 @@ model PortalAccount {
   createdAt       DateTime            @default(now())
   updatedAt       DateTime            @updatedAt
 
-  tenant      Tenant             @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-  party       Party              @relation(fields: [partyId], references: [id], onDelete: Restrict)
-  clientContact ClientContact?   @relation(fields: [clientContactId], references: [id], onDelete: Restrict)
-  activations PortalActivation[]
-  sessions    PortalSession[]
+  tenant         Tenant             @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  party          Party              @relation(fields: [partyId], references: [id], onDelete: Restrict)
+  clientContact  ClientContact?     @relation(fields: [clientContactId], references: [id], onDelete: Restrict)
+  activations    PortalActivation[]
+  sessions       PortalSession[]
   activityEvents ActivityEvent[]
 
   @@index([tenantId, portalType, status])
@@ -1349,9 +1390,9 @@ model PortalAccount {
 }
 
 model ClientContact {
-  id                    String            @id @default(uuid()) @db.Uuid
-  tenantId              String            @db.Uuid
-  partyId               String            @db.Uuid
+  id                    String   @id @default(uuid()) @db.Uuid
+  tenantId              String   @db.Uuid
+  partyId               String   @db.Uuid
   firstName             String
   lastName              String
   salutation            String?
@@ -1360,16 +1401,16 @@ model ClientContact {
   email                 String?
   phone                 String?
   mobile                String?
-  isPrimary             Boolean           @default(false)
-  isActive              Boolean           @default(true)
+  isPrimary             Boolean  @default(false)
+  isActive              Boolean  @default(true)
   notes                 String?
-  createdByMembershipId String?           @db.Uuid
-  createdAt             DateTime          @default(now())
-  updatedAt             DateTime          @updatedAt
+  createdByMembershipId String?  @db.Uuid
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
 
-  tenant              Tenant            @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-  party               Party             @relation(fields: [partyId], references: [id], onDelete: Restrict)
-  createdByMembership TenantMembership? @relation("ClientContactCreatedBy", fields: [createdByMembershipId], references: [id], onDelete: Restrict)
+  tenant              Tenant               @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  party               Party                @relation(fields: [partyId], references: [id], onDelete: Restrict)
+  createdByMembership TenantMembership?    @relation("ClientContactCreatedBy", fields: [createdByMembershipId], references: [id], onDelete: Restrict)
   portalAccount       PortalAccount?
   dataSubjectRequests DataSubjectRequest[]
 
@@ -1379,84 +1420,87 @@ model ClientContact {
 }
 
 model DataSubjectRequest {
-  id String @id @default(uuid()) @db.Uuid
-  tenantId String @db.Uuid
-  subjectPartyId String? @db.Uuid
-  clientContactId String? @db.Uuid
-  requestType DataSubjectRequestType
-  status DataSubjectRequestStatus @default(RECEIVED)
-  receivedAt DateTime @default(now())
-  identityVerifiedAt DateTime?
-  identityVerifiedByMembershipId String? @db.Uuid
-  identityVerificationNote String?
-  dueAt DateTime?
-  assignedMembershipId String? @db.Uuid
-  description String?
-  notes String?
-  decision String?
-  decisionReason String?
-  completedAt DateTime?
-  createdByMembershipId String @db.Uuid
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  tenant Tenant @relation(fields:[tenantId], references:[id], onDelete:Restrict)
-  subjectParty Party? @relation("DataSubjectParty", fields:[subjectPartyId], references:[id], onDelete:Restrict)
-  clientContact ClientContact? @relation(fields:[clientContactId], references:[id], onDelete:Restrict)
-  identityVerifiedBy TenantMembership? @relation("DataSubjectIdentityVerifiedBy", fields:[identityVerifiedByMembershipId], references:[id], onDelete:Restrict)
-  assignedMembership TenantMembership? @relation("DataSubjectAssigned", fields:[assignedMembershipId], references:[id], onDelete:Restrict)
-  createdByMembership TenantMembership @relation("DataSubjectCreatedBy", fields:[createdByMembershipId], references:[id], onDelete:Restrict)
-  exports DataSubjectAccessExport[]
-  reviews DataSubjectDataReview[]
-  @@index([tenantId,status,dueAt])
-  @@index([tenantId,subjectPartyId])
-  @@index([tenantId,clientContactId])
+  id                             String                    @id @default(uuid()) @db.Uuid
+  tenantId                       String                    @db.Uuid
+  subjectPartyId                 String?                   @db.Uuid
+  clientContactId                String?                   @db.Uuid
+  requestType                    DataSubjectRequestType
+  status                         DataSubjectRequestStatus  @default(RECEIVED)
+  receivedAt                     DateTime                  @default(now())
+  identityVerifiedAt             DateTime?
+  identityVerifiedByMembershipId String?                   @db.Uuid
+  identityVerificationNote       String?
+  dueAt                          DateTime?
+  assignedMembershipId           String?                   @db.Uuid
+  description                    String?
+  notes                          String?
+  decision                       String?
+  decisionReason                 String?
+  completedAt                    DateTime?
+  createdByMembershipId          String                    @db.Uuid
+  createdAt                      DateTime                  @default(now())
+  updatedAt                      DateTime                  @updatedAt
+  tenant                         Tenant                    @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  subjectParty                   Party?                    @relation("DataSubjectParty", fields: [subjectPartyId], references: [id], onDelete: Restrict)
+  clientContact                  ClientContact?            @relation(fields: [clientContactId], references: [id], onDelete: Restrict)
+  identityVerifiedBy             TenantMembership?         @relation("DataSubjectIdentityVerifiedBy", fields: [identityVerifiedByMembershipId], references: [id], onDelete: Restrict)
+  assignedMembership             TenantMembership?         @relation("DataSubjectAssigned", fields: [assignedMembershipId], references: [id], onDelete: Restrict)
+  createdByMembership            TenantMembership          @relation("DataSubjectCreatedBy", fields: [createdByMembershipId], references: [id], onDelete: Restrict)
+  exports                        DataSubjectAccessExport[]
+  reviews                        DataSubjectDataReview[]
+
+  @@index([tenantId, status, dueAt])
+  @@index([tenantId, subjectPartyId])
+  @@index([tenantId, clientContactId])
   @@index([assignedMembershipId])
 }
 
 model DataSubjectAccessExport {
-  id String @id @default(uuid()) @db.Uuid
-  tenantId String @db.Uuid
-  requestId String @db.Uuid
-  format String @default("JSON")
-  snapshot Json
-  sha256 String
-  generatedAt DateTime @default(now())
-  generatedByMembershipId String @db.Uuid
-  createdAt DateTime @default(now())
-  tenant Tenant @relation(fields:[tenantId], references:[id], onDelete:Restrict)
-  request DataSubjectRequest @relation(fields:[requestId], references:[id], onDelete:Restrict)
-  generatedByMembership TenantMembership @relation("DataSubjectExportGeneratedBy", fields:[generatedByMembershipId], references:[id], onDelete:Restrict)
-  @@index([tenantId,requestId,generatedAt])
+  id                      String             @id @default(uuid()) @db.Uuid
+  tenantId                String             @db.Uuid
+  requestId               String             @db.Uuid
+  format                  String             @default("JSON")
+  snapshot                Json
+  sha256                  String
+  generatedAt             DateTime           @default(now())
+  generatedByMembershipId String             @db.Uuid
+  createdAt               DateTime           @default(now())
+  tenant                  Tenant             @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  request                 DataSubjectRequest @relation(fields: [requestId], references: [id], onDelete: Restrict)
+  generatedByMembership   TenantMembership   @relation("DataSubjectExportGeneratedBy", fields: [generatedByMembershipId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId, requestId, generatedAt])
 }
 
 model DataSubjectDataReview {
-  id String @id @default(uuid()) @db.Uuid
-  tenantId String @db.Uuid
-  requestId String @db.Uuid
-  category DataSubjectDataCategory
-  recordCount Int @default(0)
-  proposedAction DataSubjectDataAction @default(REVIEW)
-  finalAction DataSubjectDataAction?
-  reason String?
-  reviewedByMembershipId String? @db.Uuid
-  reviewedAt DateTime?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  tenant Tenant @relation(fields:[tenantId], references:[id], onDelete:Restrict)
-  request DataSubjectRequest @relation(fields:[requestId], references:[id], onDelete:Restrict)
-  reviewedByMembership TenantMembership? @relation("DataSubjectReviewBy", fields:[reviewedByMembershipId], references:[id], onDelete:Restrict)
-  @@unique([requestId,category])
-  @@index([tenantId,requestId])
+  id                     String                  @id @default(uuid()) @db.Uuid
+  tenantId               String                  @db.Uuid
+  requestId              String                  @db.Uuid
+  category               DataSubjectDataCategory
+  recordCount            Int                     @default(0)
+  proposedAction         DataSubjectDataAction   @default(REVIEW)
+  finalAction            DataSubjectDataAction?
+  reason                 String?
+  reviewedByMembershipId String?                 @db.Uuid
+  reviewedAt             DateTime?
+  createdAt              DateTime                @default(now())
+  updatedAt              DateTime                @updatedAt
+  tenant                 Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  request                DataSubjectRequest      @relation(fields: [requestId], references: [id], onDelete: Restrict)
+  reviewedByMembership   TenantMembership?       @relation("DataSubjectReviewBy", fields: [reviewedByMembershipId], references: [id], onDelete: Restrict)
+
+  @@unique([requestId, category])
+  @@index([tenantId, requestId])
 }
 
 model PortalActivation {
-  id              String        @id @default(uuid()) @db.Uuid
-  portalAccountId String        @db.Uuid
+  id              String    @id @default(uuid()) @db.Uuid
+  portalAccountId String    @db.Uuid
   secretHash      String
   expiresAt       DateTime
   usedAt          DateTime?
   invalidatedAt   DateTime?
-  createdAt       DateTime      @default(now())
+  createdAt       DateTime  @default(now())
 
   portalAccount PortalAccount @relation(fields: [portalAccountId], references: [id], onDelete: Restrict)
 
@@ -1465,12 +1509,12 @@ model PortalActivation {
 }
 
 model PortalSession {
-  id              String   @id @default(uuid()) @db.Uuid
-  portalAccountId String   @db.Uuid
-  tokenHash       String   @unique
+  id              String    @id @default(uuid()) @db.Uuid
+  portalAccountId String    @db.Uuid
+  tokenHash       String    @unique
   expiresAt       DateTime
-  lastSeenAt      DateTime @default(now())
-  createdAt       DateTime @default(now())
+  lastSeenAt      DateTime  @default(now())
+  createdAt       DateTime  @default(now())
   revokedAt       DateTime?
 
   portalAccount PortalAccount @relation(fields: [portalAccountId], references: [id], onDelete: Restrict)
@@ -1484,6 +1528,7 @@ model ActivityEvent {
   tenantId             String            @db.Uuid
   caseId               String?           @db.Uuid
   partyId              String?           @db.Uuid
+  deskTicketId         String?           @db.Uuid
   actorType            ActivityActorType
   actorMembershipId    String?           @db.Uuid
   actorPortalAccountId String?           @db.Uuid
@@ -1498,12 +1543,14 @@ model ActivityEvent {
   tenant             Tenant            @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   case               Case?             @relation(fields: [caseId], references: [id], onDelete: Restrict)
   party              Party?            @relation(fields: [partyId], references: [id], onDelete: Restrict)
+  deskTicket         DeskTicket?       @relation(fields: [deskTicketId], references: [id], onDelete: Restrict)
   actorMembership    TenantMembership? @relation("ActivityActorMembership", fields: [actorMembershipId], references: [id], onDelete: Restrict)
   actorPortalAccount PortalAccount?    @relation(fields: [actorPortalAccountId], references: [id], onDelete: Restrict)
 
   @@index([tenantId, createdAt])
   @@index([caseId, createdAt])
   @@index([partyId, createdAt])
+  @@index([deskTicketId, createdAt])
   @@index([actorMembershipId])
   @@index([actorPortalAccountId])
 }
@@ -1511,8 +1558,9 @@ model ActivityEvent {
 model CommunicationEvent {
   id                    String                 @id @default(uuid()) @db.Uuid
   tenantId              String                 @db.Uuid
-  partyId               String                 @db.Uuid
+  partyId               String?                @db.Uuid
   caseId                String?                @db.Uuid
+  deskTicketId          String?                @db.Uuid
   direction             CommunicationDirection
   channel               CommunicationChannel
   source                CommunicationSource    @default(MANUAL)
@@ -1525,15 +1573,17 @@ model CommunicationEvent {
   createdAt             DateTime               @default(now())
   updatedAt             DateTime               @updatedAt
 
-  tenant             Tenant            @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-  party              Party             @relation(fields: [partyId], references: [id], onDelete: Restrict)
-  case               Case?             @relation(fields: [caseId], references: [id], onDelete: Restrict)
-  createdByMembership TenantMembership @relation("CommunicationCreatedBy", fields: [createdByMembershipId], references: [id], onDelete: Restrict)
-  attachments        CommunicationAttachment[]
+  tenant                   Tenant                    @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  party                    Party?                    @relation(fields: [partyId], references: [id], onDelete: Restrict)
+  case                     Case?                     @relation(fields: [caseId], references: [id], onDelete: Restrict)
+  deskTicket               DeskTicket?               @relation(fields: [deskTicketId], references: [id], onDelete: Restrict)
+  createdByMembership      TenantMembership          @relation("CommunicationCreatedBy", fields: [createdByMembershipId], references: [id], onDelete: Restrict)
+  attachments              CommunicationAttachment[]
   externalIntegrationLinks ExternalIntegrationLink[]
 
   @@index([tenantId, partyId, occurredAt])
   @@index([tenantId, caseId, occurredAt])
+  @@index([tenantId, deskTicketId, occurredAt])
   @@index([createdByMembershipId])
 }
 
@@ -1555,8 +1605,8 @@ model ExternalIntegrationLink {
   case          Case?               @relation(fields: [caseId], references: [id], onDelete: Restrict)
   communication CommunicationEvent? @relation(fields: [communicationId], references: [id], onDelete: Restrict)
 
-  @@unique([tenantId, provider, entityType, externalId])
-  @@unique([tenantId, provider, entityType, partyId])
+  @@unique([tenantId, provider, entityType, externalId], map: "ExternalIntegrationLink_tenantId_provider_entityType_externalId")
+  @@unique([tenantId, provider, entityType, partyId], map: "ExternalIntegrationLink_tenantId_provider_entityType_partyId_ke")
   @@index([tenantId, provider, entityType])
   @@index([partyId])
   @@index([caseId])
@@ -1564,17 +1614,17 @@ model ExternalIntegrationLink {
 }
 
 model CommunicationAttachment {
-  id              String                      @id @default(uuid()) @db.Uuid
-  tenantId        String                      @db.Uuid
-  communicationId String                      @db.Uuid
-  attachmentType  CommunicationAttachmentType @default(ATTACHMENT)
-  originalFileName String                     @db.VarChar(255)
-  mimeType        String                      @db.VarChar(150)
-  size            Int
-  storageKey      String                      @unique
-  sha256          String?                     @db.Char(64)
-  metadata        Json?
-  createdAt       DateTime                    @default(now())
+  id               String                      @id @default(uuid()) @db.Uuid
+  tenantId         String                      @db.Uuid
+  communicationId  String                      @db.Uuid
+  attachmentType   CommunicationAttachmentType @default(ATTACHMENT)
+  originalFileName String                      @db.VarChar(255)
+  mimeType         String                      @db.VarChar(150)
+  size             Int
+  storageKey       String                      @unique
+  sha256           String?                     @db.Char(64)
+  metadata         Json?
+  createdAt        DateTime                    @default(now())
 
   tenant        Tenant             @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   communication CommunicationEvent @relation(fields: [communicationId], references: [id], onDelete: Restrict)
@@ -1644,7 +1694,7 @@ model Address {
   updatedAt    DateTime    @updatedAt
   deletedAt    DateTime?
 
-  party Party @relation(fields: [partyId], references: [id], onDelete: Restrict)
+  party            Party                    @relation(fields: [partyId], references: [id], onDelete: Restrict)
   researchRequests AddressResearchRequest[]
 
   @@index([partyId, deletedAt, isPrimary])
@@ -1713,47 +1763,47 @@ model AddressResearchResult {
   rawProviderData       Json?
   createdAt             DateTime                  @default(now())
 
-  tenant              Tenant                   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-  researchRequest     AddressResearchRequest   @relation("AddressResearchResults", fields: [researchRequestId], references: [id], onDelete: Restrict)
-  selectedForRequest  AddressResearchRequest?  @relation("AddressResearchSelectedResult")
-  appliedByMembership TenantMembership?        @relation("AddressResearchAppliedBy", fields: [appliedByMembershipId], references: [id], onDelete: Restrict)
+  tenant              Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  researchRequest     AddressResearchRequest  @relation("AddressResearchResults", fields: [researchRequestId], references: [id], onDelete: Restrict)
+  selectedForRequest  AddressResearchRequest? @relation("AddressResearchSelectedResult")
+  appliedByMembership TenantMembership?       @relation("AddressResearchAppliedBy", fields: [appliedByMembershipId], references: [id], onDelete: Restrict)
 
   @@index([tenantId, researchRequestId, createdAt])
   @@index([appliedByMembershipId])
 }
 
 model CreditBureauReport {
-  id                       String                               @id @default(uuid()) @db.Uuid
-  tenantId                 String                               @db.Uuid
-  partyId                  String                               @db.Uuid
-  caseId                   String                               @db.Uuid
-  provider                 CreditBureauProvider
-  status                   CreditBureauReportStatus             @default(DRAFT)
-  eligibilityStatus        CreditBureauEligibilityStatus        @default(PENDING)
-  eligibilityReason        String?
-  eligibilityDetails       Json?
-  eligibilityCheckedAt     DateTime?
-  approvedAt               DateTime?
-  approvedByMembershipId   String?                              @db.Uuid
-  approvalReason           String?
-  approvalSnapshot         Json?
-  approvalStaleAt          DateTime?
-  submittedAt              DateTime?
-  externalReference        String?
-  reportedAmount           Decimal?                             @db.Decimal(15, 2)
-  currency                 String                               @default("EUR") @db.Char(3)
-  settledAt                DateTime?
-  cancelledAt              DateTime?
-  activeKey                String?                              @unique
-  createdByMembershipId    String                               @db.Uuid
-  createdAt                DateTime                             @default(now())
-  updatedAt                DateTime                             @updatedAt
+  id                     String                        @id @default(uuid()) @db.Uuid
+  tenantId               String                        @db.Uuid
+  partyId                String                        @db.Uuid
+  caseId                 String                        @db.Uuid
+  provider               CreditBureauProvider
+  status                 CreditBureauReportStatus      @default(DRAFT)
+  eligibilityStatus      CreditBureauEligibilityStatus @default(PENDING)
+  eligibilityReason      String?
+  eligibilityDetails     Json?
+  eligibilityCheckedAt   DateTime?
+  approvedAt             DateTime?
+  approvedByMembershipId String?                       @db.Uuid
+  approvalReason         String?
+  approvalSnapshot       Json?
+  approvalStaleAt        DateTime?
+  submittedAt            DateTime?
+  externalReference      String?
+  reportedAmount         Decimal?                      @db.Decimal(15, 2)
+  currency               String                        @default("EUR") @db.Char(3)
+  settledAt              DateTime?
+  cancelledAt            DateTime?
+  activeKey              String?                       @unique
+  createdByMembershipId  String                        @db.Uuid
+  createdAt              DateTime                      @default(now())
+  updatedAt              DateTime                      @updatedAt
 
-  tenant               Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-  party                Party                  @relation(fields: [partyId], references: [id], onDelete: Restrict)
-  case                 Case                   @relation(fields: [caseId], references: [id], onDelete: Restrict)
-  approvedByMembership TenantMembership?      @relation("CreditReportApprovedBy", fields: [approvedByMembershipId], references: [id], onDelete: Restrict)
-  createdByMembership  TenantMembership       @relation("CreditReportCreatedBy", fields: [createdByMembershipId], references: [id], onDelete: Restrict)
+  tenant               Tenant                    @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  party                Party                     @relation(fields: [partyId], references: [id], onDelete: Restrict)
+  case                 Case                      @relation(fields: [caseId], references: [id], onDelete: Restrict)
+  approvedByMembership TenantMembership?         @relation("CreditReportApprovedBy", fields: [approvedByMembershipId], references: [id], onDelete: Restrict)
+  createdByMembership  TenantMembership          @relation("CreditReportCreatedBy", fields: [createdByMembershipId], references: [id], onDelete: Restrict)
   events               CreditBureauReportEvent[]
 
   @@index([tenantId, status, updatedAt])
@@ -1775,9 +1825,9 @@ model CreditBureauReportEvent {
   metadata          Json?
   createdAt         DateTime                    @default(now())
 
-  tenant          Tenant            @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  tenant          Tenant             @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   report          CreditBureauReport @relation(fields: [reportId], references: [id], onDelete: Restrict)
-  actorMembership TenantMembership? @relation("CreditReportEventActor", fields: [actorMembershipId], references: [id], onDelete: Restrict)
+  actorMembership TenantMembership?  @relation("CreditReportEventActor", fields: [actorMembershipId], references: [id], onDelete: Restrict)
 
   @@index([tenantId, reportId, createdAt])
   @@index([actorMembershipId])
@@ -1839,36 +1889,38 @@ model TenantMembership {
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   user   User   @relation(fields: [userId], references: [id], onDelete: Restrict)
 
-  teamMemberships      TeamMembership[]
-  roleAssignments      MembershipRole[]
-  ownedCases           Case[]
-  createdLedgerEntries CaseLedgerEntry[]
-  createdDocuments     CaseDocument[]
-  assignedTasks        CaseTask[]          @relation("AssignedTasks")
-  createdTasks         CaseTask[]          @relation("CreatedTasks")
-  reviewedSubmissions  ClientSubmission[]
-  reviewedInstallmentRequests InstallmentRequest[]
-  assignedCases      Case[]              @relation("AssignedCases")
-  staffSessions      StaffSession[]
-  createdInstallmentPlans InstallmentPlan[] @relation("CreatedInstallmentPlans")
-  cancelledInstallmentPlans InstallmentPlan[] @relation("CancelledInstallmentPlans")
-  activityEvents      ActivityEvent[]      @relation("ActivityActorMembership")
-  createdEnforcementTitles EnforcementTitle[] @relation("EnforcementTitleCreatedBy")
-  createdEnforcementActions EnforcementAction[] @relation("EnforcementActionCreatedBy")
-  createdCommunications CommunicationEvent[] @relation("CommunicationCreatedBy")
-  createdClientContacts ClientContact[] @relation("ClientContactCreatedBy")
-  createdDataSubjectRequests DataSubjectRequest[] @relation("DataSubjectCreatedBy")
-  assignedDataSubjectRequests DataSubjectRequest[] @relation("DataSubjectAssigned")
-  identityVerifiedDataSubjectRequests DataSubjectRequest[] @relation("DataSubjectIdentityVerifiedBy")
-  generatedDataSubjectAccessExports DataSubjectAccessExport[] @relation("DataSubjectExportGeneratedBy")
-  reviewedDataSubjectReviews DataSubjectDataReview[] @relation("DataSubjectReviewBy")
-  importedBankFiles BankImport[] @relation("BankImportImportedBy")
-  reviewedBankTransactions BankTransaction[] @relation("BankTransactionReviewedBy")
-  requestedAddressResearches AddressResearchRequest[] @relation("AddressResearchRequestedBy")
-  appliedAddressResearchResults AddressResearchResult[] @relation("AddressResearchAppliedBy")
-  createdCreditBureauReports CreditBureauReport[] @relation("CreditReportCreatedBy")
-  approvedCreditBureauReports CreditBureauReport[] @relation("CreditReportApprovedBy")
-  creditBureauReportEvents CreditBureauReportEvent[] @relation("CreditReportEventActor")
+  teamMemberships                     TeamMembership[]
+  roleAssignments                     MembershipRole[]
+  ownedCases                          Case[]
+  createdLedgerEntries                CaseLedgerEntry[]
+  createdDocuments                    CaseDocument[]
+  assignedTasks                       CaseTask[]                @relation("AssignedTasks")
+  createdTasks                        CaseTask[]                @relation("CreatedTasks")
+  reviewedSubmissions                 ClientSubmission[]
+  reviewedInstallmentRequests         InstallmentRequest[]
+  assignedCases                       Case[]                    @relation("AssignedCases")
+  staffSessions                       StaffSession[]
+  createdInstallmentPlans             InstallmentPlan[]         @relation("CreatedInstallmentPlans")
+  cancelledInstallmentPlans           InstallmentPlan[]         @relation("CancelledInstallmentPlans")
+  activityEvents                      ActivityEvent[]           @relation("ActivityActorMembership")
+  createdEnforcementTitles            EnforcementTitle[]        @relation("EnforcementTitleCreatedBy")
+  createdEnforcementActions           EnforcementAction[]       @relation("EnforcementActionCreatedBy")
+  createdCommunications               CommunicationEvent[]      @relation("CommunicationCreatedBy")
+  createdClientContacts               ClientContact[]           @relation("ClientContactCreatedBy")
+  createdDataSubjectRequests          DataSubjectRequest[]      @relation("DataSubjectCreatedBy")
+  assignedDataSubjectRequests         DataSubjectRequest[]      @relation("DataSubjectAssigned")
+  identityVerifiedDataSubjectRequests DataSubjectRequest[]      @relation("DataSubjectIdentityVerifiedBy")
+  generatedDataSubjectAccessExports   DataSubjectAccessExport[] @relation("DataSubjectExportGeneratedBy")
+  reviewedDataSubjectReviews          DataSubjectDataReview[]   @relation("DataSubjectReviewBy")
+  importedBankFiles                   BankImport[]              @relation("BankImportImportedBy")
+  reviewedBankTransactions            BankTransaction[]         @relation("BankTransactionReviewedBy")
+  requestedAddressResearches          AddressResearchRequest[]  @relation("AddressResearchRequestedBy")
+  appliedAddressResearchResults       AddressResearchResult[]   @relation("AddressResearchAppliedBy")
+  createdCreditBureauReports          CreditBureauReport[]      @relation("CreditReportCreatedBy")
+  approvedCreditBureauReports         CreditBureauReport[]      @relation("CreditReportApprovedBy")
+  creditBureauReportEvents            CreditBureauReportEvent[] @relation("CreditReportEventActor")
+  assignedDeskTickets                 DeskTicket[]              @relation("DeskTicketAssignee")
+  createdDeskTickets                  DeskTicket[]              @relation("DeskTicketCreatedBy")
 
   @@unique([tenantId, userId])
   @@index([userId, deletedAt])
@@ -1876,15 +1928,15 @@ model TenantMembership {
 }
 
 model StaffSession {
-  id                 String   @id @default(uuid()) @db.Uuid
-  userId             String   @db.Uuid
-  tenantId           String   @db.Uuid
-  tenantMembershipId String   @db.Uuid
-  tokenHash          String   @unique
+  id                 String    @id @default(uuid()) @db.Uuid
+  userId             String    @db.Uuid
+  tenantId           String    @db.Uuid
+  tenantMembershipId String    @db.Uuid
+  tokenHash          String    @unique
   expiresAt          DateTime
-  lastSeenAt         DateTime @default(now())
+  lastSeenAt         DateTime  @default(now())
   revokedAt          DateTime?
-  createdAt          DateTime @default(now())
+  createdAt          DateTime  @default(now())
 
   user       User             @relation(fields: [userId], references: [id], onDelete: Restrict)
   tenant     Tenant           @relation(fields: [tenantId], references: [id], onDelete: Restrict)
@@ -1903,11 +1955,50 @@ model Team {
   updatedAt DateTime  @updatedAt
   deletedAt DateTime?
 
-  tenant  Tenant           @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-  members TeamMembership[]
+  tenant      Tenant           @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  members     TeamMembership[]
+  deskTickets DeskTicket[]
 
   @@unique([tenantId, name])
   @@index([tenantId, deletedAt])
+}
+
+model DeskTicket {
+  id                    String             @id @default(uuid()) @db.Uuid
+  tenantId              String             @db.Uuid
+  number                String
+  sequenceYear          Int
+  sequenceNumber        Int
+  subject               String             @db.VarChar(300)
+  status                DeskTicketStatus   @default(OPEN)
+  priority              DeskTicketPriority @default(NORMAL)
+  category              String?            @db.VarChar(100)
+  partyId               String?            @db.Uuid
+  caseId                String?            @db.Uuid
+  assigneeMembershipId  String?            @db.Uuid
+  teamId                String?            @db.Uuid
+  createdByMembershipId String?            @db.Uuid
+  createdAt             DateTime           @default(now())
+  updatedAt             DateTime           @updatedAt
+  closedAt              DateTime?
+
+  tenant              Tenant               @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  party               Party?               @relation(fields: [partyId], references: [id], onDelete: Restrict)
+  case                Case?                @relation(fields: [caseId], references: [id], onDelete: Restrict)
+  assigneeMembership  TenantMembership?    @relation("DeskTicketAssignee", fields: [assigneeMembershipId], references: [id], onDelete: Restrict)
+  team                Team?                @relation(fields: [teamId], references: [id], onDelete: Restrict)
+  createdByMembership TenantMembership?    @relation("DeskTicketCreatedBy", fields: [createdByMembershipId], references: [id], onDelete: Restrict)
+  communications      CommunicationEvent[]
+  activityEvents      ActivityEvent[]
+
+  @@unique([tenantId, number])
+  @@unique([tenantId, sequenceYear, sequenceNumber])
+  @@index([tenantId, status, updatedAt])
+  @@index([tenantId, priority, updatedAt])
+  @@index([tenantId, assigneeMembershipId, status])
+  @@index([tenantId, teamId, status])
+  @@index([partyId, updatedAt])
+  @@index([caseId, updatedAt])
 }
 
 model TeamMembership {

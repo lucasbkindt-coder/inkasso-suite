@@ -8,7 +8,10 @@ async function bootstrap() {
   const allowedOrigins = new Set([
     "http://localhost:3000",
     "http://127.0.0.1:3000",
+    "http://localhost:3002",
+    "http://127.0.0.1:3002",
     ...(process.env.RISEPAY_LAN_ORIGIN ? [process.env.RISEPAY_LAN_ORIGIN] : []),
+    ...(process.env.DESK_PUBLIC_BASE_URL ? [process.env.DESK_PUBLIC_BASE_URL] : []),
   ]);
 
   app.enableCors({

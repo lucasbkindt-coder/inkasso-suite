@@ -12,6 +12,7 @@ type EventInput = {
   tenantId: string;
   caseId?: string;
   partyId?: string;
+  deskTicketId?: string;
   eventType: ActivityEventType;
   title?: string;
   description?: string;
@@ -94,6 +95,13 @@ const TITLES: Record<ActivityEventType, string> = {
   TITLE_SATISFIED: "Titel als erfüllt markiert",
   ENFORCEMENT_ACTION_CREATED: "Vollstreckungsmaßnahme angelegt",
   ENFORCEMENT_ACTION_STATUS_CHANGED: "Status der Vollstreckungsmaßnahme geändert",
+  DESK_TICKET_CREATED: "Desk-Ticket angelegt",
+  DESK_TICKET_STATUS_CHANGED: "Desk-Ticketstatus geändert",
+  DESK_TICKET_PRIORITY_CHANGED: "Desk-Ticketpriorität geändert",
+  DESK_TICKET_ASSIGNEE_CHANGED: "Desk-Ticket zugewiesen",
+  DESK_TICKET_PARTY_LINKED: "Partei mit Desk-Ticket verknüpft",
+  DESK_TICKET_CASE_LINKED: "Inkassoakte mit Desk-Ticket verknüpft",
+  DESK_TICKET_COMMENT_ADDED: "Interne Notiz hinzugefügt",
 };
 
 @Injectable()
@@ -141,6 +149,7 @@ export class ActivityService {
         tenantId: input.tenantId,
         caseId: input.caseId,
         partyId: input.partyId,
+        deskTicketId: input.deskTicketId,
         actorType: input.actorType,
         actorMembershipId: input.actorMembershipId,
         actorPortalAccountId: input.actorPortalAccountId,
