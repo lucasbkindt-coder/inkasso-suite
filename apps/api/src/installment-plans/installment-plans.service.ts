@@ -124,7 +124,51 @@ export class InstallmentPlansService {
   }
 
   private include() { return { items: { orderBy: { sequenceNumber: "asc" as const } }, case: { select: { id: true, caseNumber: true, clientParty: { select: { displayName: true } }, debtorParty: { select: { displayName: true } } } } }; }
-  private async hydrate(plan: any) { const payments = plan.status === InstallmentPlanStatus.ACTIVE || plan.status === InstallmentPlanStatus.COMPLETED ? await this.payments(plan.tenantId, plan.caseId, plan.activatedAt) : []; const open = await this.openAmount(this.prisma, plan.tenantId, plan.caseId); const model = this.readModel(plan, payments, open); if (plan.status === InstallmentPlanStatus.ACTIVE && model.items.every((item: any) => item.status === "PAID")) { const completedAt = new Date(); const completed = await this.prisma.$transaction(async (tx) => { const updated = await tx.installmentPlan.updateMany({ where: { id: plan.id, status: InstallmentPlanStatus.ACTIVE }, data: { status: InstallmentPlanStatus.COMPLETED, completedAt } }); if (updated.count) await this.activity.recordSystemEvent(tx, { tenantId: plan.tenantId, caseId: plan.caseId, partyId: plan.debtorPartyId, eventType: ActivityEventType.INSTALLMENT_PLAN_COMPLETED, description: "Ratenplan wurde abgeschlossen.", metadata: { installmentPlanId: plan.id }, sourceEntityType: "InstallmentPlan", sourceEntityId: plan.id }); return updated.count === 1; }); if (completed) { model.status = "COMPLETED"; model.completedAt = completedAt; } } return model; }
+  private async hydrate(plan: any) {
+    const payments =
+      plan.status === InstallmentPlanStatus.ACTIVE ||
+      plan.status === InstallmentPlanStatus.COMPLETED
+        ? await this.payments(plan.tenantId, plan.caseId, plan.activatedAt)
+        : [];
+    const open = await this.openAmount(this.prisma, plan.tenantId, plan.caseId);
+    const model = this.readModel(plan, payments, open);
+    const fulfilled = model.items.every((item: any) => item.status === "PAID");
+    if (plan.status === InstallmentPlanStatus.ACTIVE && fulfilled) {
+      const completedAt = new Date();
+      const completed = await this.prisma.$transaction(async (tx) => {
+        const updated = await tx.installmentPlan.updateMany({
+          where: { id: plan.id, status: InstallmentPlanStatus.ACTIVE },
+          data: { status: InstallmentPlanStatus.COMPLETED, completedAt },
+        });
+        if (updated.count)
+          await this.activity.recordSystemEvent(tx, {
+            tenantId: plan.tenantId,
+            caseId: plan.caseId,
+            partyId: plan.debtorPartyId,
+            eventType: ActivityEventType.INSTALLMENT_PLAN_COMPLETED,
+            description: "Ratenplan wurde abgeschlossen.",
+            metadata: { installmentPlanId: plan.id },
+            sourceEntityType: "InstallmentPlan",
+            sourceEntityId: plan.id,
+          });
+        return updated.count === 1;
+      });
+      if (completed) {
+        model.status = "COMPLETED";
+        model.completedAt = completedAt;
+      }
+    } else if (plan.status === InstallmentPlanStatus.COMPLETED && !fulfilled) {
+      const reopened = await this.prisma.installmentPlan.updateMany({
+        where: { id: plan.id, status: InstallmentPlanStatus.COMPLETED },
+        data: { status: InstallmentPlanStatus.ACTIVE, completedAt: null },
+      });
+      if (reopened.count) {
+        model.status = "ACTIVE";
+        model.completedAt = null;
+      }
+    }
+    return model;
+  }
   private async payments(tenantId: string, caseId: string, activatedAt: Date | null) { if (!activatedAt) return []; return this.prisma.caseLedgerEntry.findMany({ where: { tenantId, caseId, type: LedgerEntryType.PAYMENT, side: LedgerEntrySide.CREDIT, status: LedgerEntryStatus.ACTIVE, createdAt: { gte: activatedAt } }, select: { amount: true, bookingDate: true, createdAt: true, id: true }, orderBy: [{ bookingDate: "asc" }, { createdAt: "asc" }, { id: "asc" }] }); }
   private async openAmount(tx: Prisma.TransactionClient | PrismaService, tenantId: string, caseId: string) { const entries = await tx.caseLedgerEntry.findMany({ where: { tenantId, caseId, status: LedgerEntryStatus.ACTIVE }, include: { targetAllocations: { where: { status: "ACTIVE" } } } }); let debit = new Prisma.Decimal(0); let credit = new Prisma.Decimal(0); for (const entry of entries) { if (entry.side === LedgerEntrySide.DEBIT) debit = debit.plus(entry.amount); else credit = credit.plus(entry.amount); } return Prisma.Decimal.max(0, debit.minus(credit)); }
   private readModel(plan: any, payments: { amount: Prisma.Decimal }[], currentOpen: Prisma.Decimal) { let received = payments.reduce((sum, payment) => sum.plus(payment.amount), new Prisma.Decimal(0)); const today = new Date(); const items = plan.items.map((item: any) => { const credited = plan.status === InstallmentPlanStatus.CANCELLED ? new Prisma.Decimal(0) : Prisma.Decimal.min(item.plannedAmount, received); received = Prisma.Decimal.max(0, received.minus(item.plannedAmount)); const remaining = item.plannedAmount.minus(credited); const status = plan.status === InstallmentPlanStatus.CANCELLED ? "CANCELLED" : remaining.isZero() ? "PAID" : credited.gt(0) ? "PARTIALLY_PAID" : plan.status === InstallmentPlanStatus.ACTIVE && item.dueDate < today ? "OVERDUE" : "OPEN"; return { id: item.id, sequenceNumber: item.sequenceNumber, dueDate: item.dueDate, plannedAmount: item.plannedAmount.toFixed(2), creditedAmount: credited.toFixed(2), remainingAmount: remaining.toFixed(2), status }; }); const next = items.find((item: any) => item.status !== "PAID" && item.status !== "CANCELLED") ?? null; return { id: plan.id, status: plan.status, source: plan.source, initialOpenAmount: plan.initialOpenAmount.toFixed(2), plannedInstallmentAmount: plan.plannedInstallmentAmount.toFixed(2), startDate: plan.startDate, numberOfInstallments: plan.numberOfInstallments, activatedAt: plan.activatedAt, completedAt: plan.completedAt, cancelledAt: plan.cancelledAt, case: plan.case, currentCaseBalance: currentOpen.toFixed(2), planCaseDifference: currentOpen.minus(plan.initialOpenAmount).toFixed(2), nextItem: next, items }; }

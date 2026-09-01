@@ -50,6 +50,13 @@ const allocatableTypes = new Set<LedgerEntryType>([
   LedgerEntryType.PRINCIPAL,
 ]);
 export type PrincipalBalancePeriod = { from: Date; to: Date; principalBalance: Prisma.Decimal };
+export type PaymentBookingInput = {
+  tenantId: string;
+  caseId: string;
+  dto: CreatePaymentDto;
+  actorMembershipId: string;
+  source?: string;
+};
 
 @Injectable()
 export class LedgerService {
@@ -137,135 +144,149 @@ export class LedgerService {
   async applyPayment(caseId: string, dto: CreatePaymentDto) {
     const tenantId = await this.tenantContext.getTenantId();
     await this.assertCase(caseId, tenantId);
+    return this.prisma.$transaction((tx) =>
+      this.applyPaymentInTransaction(tx, {
+        tenantId,
+        caseId,
+        dto,
+        actorMembershipId: this.tenantContext.getStaffContext().tenantMembershipId,
+      }),
+    );
+  }
+
+  async applyPaymentInTransaction(tx: Prisma.TransactionClient, input: PaymentBookingInput) {
+    const { tenantId, caseId, dto, actorMembershipId } = input;
     const amount = new Prisma.Decimal(dto.amount);
     if (amount.lte(0))
       throw new BadRequestException("Der Zahlungsbetrag muss größer als null sein.");
-    return this.prisma.$transaction(async (tx) => {
-      const payment = await tx.caseLedgerEntry.create({
-        data: {
-          tenantId,
-          caseId,
-          side: LedgerEntrySide.CREDIT,
-          type: LedgerEntryType.PAYMENT,
-          amount,
-          currency: dto.currency.toUpperCase(),
-          bookingDate: new Date(dto.bookingDate),
-          valueDate: dto.valueDate ? new Date(dto.valueDate) : undefined,
-          description: dto.description?.trim() || "Zahlungseingang",
-          externalReference: dto.reference?.trim(),
-          source: "payment-allocation",
-          allocationPolicy: dto.allocationPolicy,
-        },
-      });
-      const caseRecord = await tx.case.findFirstOrThrow({ where: { id: caseId, tenantId }, select: { debtorPartyId: true } });
-      await this.activity.recordStaffEvent(tx, this.tenantContext.getStaffContext().tenantMembershipId, {
+    const payment = await tx.caseLedgerEntry.create({
+      data: {
         tenantId,
         caseId,
-        partyId: caseRecord.debtorPartyId,
-        eventType: ActivityEventType.PAYMENT_CREATED,
-        description: `Zahlung über ${amount.toFixed(2)} ${dto.currency.toUpperCase()} wurde erfasst.`,
-        metadata: { paymentId: payment.id, amount: amount.toFixed(2), bookingDate: dto.bookingDate },
-        sourceEntityType: "CaseLedgerEntry",
-        sourceEntityId: payment.id,
-      });
-      const targets = await tx.caseLedgerEntry.findMany({
-        where: {
-          tenantId,
-          caseId,
-          status: LedgerEntryStatus.ACTIVE,
-          side: LedgerEntrySide.DEBIT,
-          type: { in: [...allocatableTypes] },
-        },
-        orderBy: [{ bookingDate: "asc" }, { createdAt: "asc" }, { id: "asc" }],
-        include: { targetAllocations: { where: { status: PaymentAllocationStatus.ACTIVE } } },
-      });
-      let remaining = amount;
-      let allocationOrder = 0;
-      const allocations = [] as {
-        targetEntryId: string;
-        amount: Prisma.Decimal;
-        policy: AllocationPolicy;
-        allocationOrder: number;
-      }[];
-      const selected =
-        dto.allocationPolicy === AllocationPolicy.CUSTOM ? (dto.allocations ?? []) : undefined;
-      if (selected) {
-        const selectedTargetIds = new Set<string>();
-        for (const item of selected) {
-          if (selectedTargetIds.has(item.targetEntryId))
-            throw new BadRequestException("Eine Zielbuchung darf nur einmal zugeordnet werden.");
-          selectedTargetIds.add(item.targetEntryId);
-          const target = targets.find((entry) => entry.id === item.targetEntryId);
-          if (!target) throw new BadRequestException("Die Zielbuchung ist nicht tilgungsfähig.");
-          const requested = new Prisma.Decimal(item.amount);
-          if (requested.lte(0))
-            throw new BadRequestException("Zuordnungsbeträge müssen größer als null sein.");
-          const allocated = target.targetAllocations.reduce(
-            (sum, allocation) => sum.plus(allocation.amount),
-            new Prisma.Decimal(0),
-          );
-          const open = target.amount.minus(allocated);
-          if (requested.gt(open))
-            throw new BadRequestException("Der Zuordnungsbetrag überschreitet den offenen Betrag.");
-          if (requested.gt(remaining))
-            throw new BadRequestException("Die Summe der Zuordnungen überschreitet die Zahlung.");
-          allocationOrder += 1;
-          allocations.push({
-            targetEntryId: target.id,
-            amount: requested,
-            policy: dto.allocationPolicy,
-            allocationOrder,
-          });
-          remaining = remaining.minus(requested);
-        }
-      }
-      for (const target of selected ? [] : this.orderBgb367(targets)) {
-        if (remaining.lte(0)) break;
+        side: LedgerEntrySide.CREDIT,
+        type: LedgerEntryType.PAYMENT,
+        amount,
+        currency: dto.currency.toUpperCase(),
+        bookingDate: new Date(dto.bookingDate),
+        valueDate: dto.valueDate ? new Date(dto.valueDate) : undefined,
+        description: dto.description?.trim() || "Zahlungseingang",
+        externalReference: dto.reference?.trim(),
+        source: input.source ?? "payment-allocation",
+        createdByMembershipId: actorMembershipId,
+        allocationPolicy: dto.allocationPolicy,
+      },
+    });
+    const caseRecord = await tx.case.findFirstOrThrow({
+      where: { id: caseId, tenantId },
+      select: { debtorPartyId: true },
+    });
+    await this.activity.recordStaffEvent(tx, actorMembershipId, {
+      tenantId,
+      caseId,
+      partyId: caseRecord.debtorPartyId,
+      eventType: ActivityEventType.PAYMENT_CREATED,
+      description: `Zahlung über ${amount.toFixed(2)} ${dto.currency.toUpperCase()} wurde erfasst.`,
+      metadata: { paymentId: payment.id, amount: amount.toFixed(2), bookingDate: dto.bookingDate },
+      sourceEntityType: "CaseLedgerEntry",
+      sourceEntityId: payment.id,
+    });
+    const targets = await tx.caseLedgerEntry.findMany({
+      where: {
+        tenantId,
+        caseId,
+        status: LedgerEntryStatus.ACTIVE,
+        side: LedgerEntrySide.DEBIT,
+        type: { in: [...allocatableTypes] },
+      },
+      orderBy: [{ bookingDate: "asc" }, { createdAt: "asc" }, { id: "asc" }],
+      include: { targetAllocations: { where: { status: PaymentAllocationStatus.ACTIVE } } },
+    });
+    let remaining = amount;
+    let allocationOrder = 0;
+    const allocations = [] as {
+      targetEntryId: string;
+      amount: Prisma.Decimal;
+      policy: AllocationPolicy;
+      allocationOrder: number;
+    }[];
+    const selected =
+      dto.allocationPolicy === AllocationPolicy.CUSTOM ? (dto.allocations ?? []) : undefined;
+    if (selected) {
+      const selectedTargetIds = new Set<string>();
+      for (const item of selected) {
+        if (selectedTargetIds.has(item.targetEntryId))
+          throw new BadRequestException("Eine Zielbuchung darf nur einmal zugeordnet werden.");
+        selectedTargetIds.add(item.targetEntryId);
+        const target = targets.find((entry) => entry.id === item.targetEntryId);
+        if (!target) throw new BadRequestException("Die Zielbuchung ist nicht tilgungsfähig.");
+        const requested = new Prisma.Decimal(item.amount);
+        if (requested.lte(0))
+          throw new BadRequestException("Zuordnungsbeträge müssen größer als null sein.");
         const allocated = target.targetAllocations.reduce(
-          (sum, item) => sum.plus(item.amount),
+          (sum, allocation) => sum.plus(allocation.amount),
           new Prisma.Decimal(0),
         );
         const open = target.amount.minus(allocated);
-        if (open.lte(0)) continue;
-        const applied = Prisma.Decimal.min(remaining, open);
+        if (requested.gt(open))
+          throw new BadRequestException("Der Zuordnungsbetrag überschreitet den offenen Betrag.");
+        if (requested.gt(remaining))
+          throw new BadRequestException("Die Summe der Zuordnungen überschreitet die Zahlung.");
         allocationOrder += 1;
         allocations.push({
           targetEntryId: target.id,
-          amount: applied,
+          amount: requested,
           policy: dto.allocationPolicy,
           allocationOrder,
         });
-        remaining = remaining.minus(applied);
+        remaining = remaining.minus(requested);
       }
-      if (allocations.length)
-        await tx.paymentAllocation.createMany({
-          data: allocations.map((allocation) => ({
-            ...allocation,
-            tenantId,
-            caseId,
-            paymentEntryId: payment.id,
-          })),
-        });
-      const ledgerEntries = await tx.caseLedgerEntry.findMany({
-        where: { tenantId, caseId, status: LedgerEntryStatus.ACTIVE },
+    }
+    for (const target of selected ? [] : this.orderBgb367(targets)) {
+      if (remaining.lte(0)) break;
+      const allocated = target.targetAllocations.reduce(
+        (sum, item) => sum.plus(item.amount),
+        new Prisma.Decimal(0),
+      );
+      const open = target.amount.minus(allocated);
+      if (open.lte(0)) continue;
+      const applied = Prisma.Decimal.min(remaining, open);
+      allocationOrder += 1;
+      allocations.push({
+        targetEntryId: target.id,
+        amount: applied,
+        policy: dto.allocationPolicy,
+        allocationOrder,
       });
-      const allAllocations = await tx.paymentAllocation.findMany({
-        where: { tenantId, caseId, status: PaymentAllocationStatus.ACTIVE },
+      remaining = remaining.minus(applied);
+    }
+    if (allocations.length)
+      await tx.paymentAllocation.createMany({
+        data: allocations.map((allocation) => ({
+          ...allocation,
+          tenantId,
+          caseId,
+          paymentEntryId: payment.id,
+        })),
       });
-      return {
-        payment,
-        allocations: allocations.map((allocation) => {
-          const target = targets.find((entry) => entry.id === allocation.targetEntryId);
-          return {
-            ...allocation,
-            targetType: target?.type,
-            targetDescription: target?.description,
-          };
-        }),
-        unallocatedAmount: remaining.toFixed(2),
-        balances: this.calculateTotals(ledgerEntries, this.allocationMap(allAllocations)),
-      };
+    const ledgerEntries = await tx.caseLedgerEntry.findMany({
+      where: { tenantId, caseId, status: LedgerEntryStatus.ACTIVE },
     });
+    const allAllocations = await tx.paymentAllocation.findMany({
+      where: { tenantId, caseId, status: PaymentAllocationStatus.ACTIVE },
+    });
+    return {
+      payment,
+      allocations: allocations.map((allocation) => {
+        const target = targets.find((entry) => entry.id === allocation.targetEntryId);
+        return {
+          ...allocation,
+          targetType: target?.type,
+          targetDescription: target?.description,
+        };
+      }),
+      unallocatedAmount: remaining.toFixed(2),
+      balances: this.calculateTotals(ledgerEntries, this.allocationMap(allAllocations)),
+    };
   }
 
   async create(caseId: string, dto: CreateLedgerEntryDto) {
@@ -336,6 +357,10 @@ export class LedgerService {
         await tx.paymentAllocation.updateMany({
           where: { paymentEntryId: entry.id, status: PaymentAllocationStatus.ACTIVE },
           data: { status: PaymentAllocationStatus.REVERSED, reversedAt: new Date() },
+        });
+        await tx.bankTransaction.updateMany({
+          where: { tenantId, paymentId: entry.id },
+          data: { status: "PAYMENT_REVERSED" },
         });
       }
       const reversal = await tx.caseLedgerEntry.create({

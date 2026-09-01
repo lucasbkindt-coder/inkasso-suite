@@ -1,7 +1,6 @@
 generator client {
   provider = "prisma-client-js"
 }
-
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
@@ -187,6 +186,34 @@ enum AllocationPolicy {
 enum PaymentAllocationStatus {
   ACTIVE
   REVERSED
+}
+
+enum BankFileFormat {
+  CAMT_053
+  CAMT_054
+}
+
+enum BankImportStatus {
+  PROCESSING
+  COMPLETED
+  COMPLETED_WITH_REVIEW
+  FAILED
+}
+
+enum BankTransactionDirection {
+  CREDIT
+  DEBIT
+}
+
+enum BankTransactionStatus {
+  IMPORTED
+  MATCHED
+  BOOKED
+  REVIEW_REQUIRED
+  DUPLICATE
+  IGNORED
+  ERROR
+  PAYMENT_REVERSED
 }
 
 enum DocumentType {
@@ -399,6 +426,12 @@ enum ActivityEventType {
   DATA_SUBJECT_RESTRICTION_APPLIED
   DATA_SUBJECT_RESTRICTION_REMOVED
   DATA_SUBJECT_REQUEST_COMPLETED
+  BANK_IMPORT_CREATED
+  BANK_TRANSACTION_AUTO_MATCHED
+  BANK_TRANSACTION_REVIEW_REQUIRED
+  BANK_TRANSACTION_MANUALLY_MATCHED
+  BANK_TRANSACTION_BOOKED
+  BANK_TRANSACTION_IGNORED
   TITLE_CREATED
   TITLE_ACTIVATED
   TITLE_VOIDED
@@ -553,6 +586,8 @@ model Tenant {
   enforcementActions  EnforcementAction[]
   communications      CommunicationEvent[]
   communicationAttachments CommunicationAttachment[]
+  bankImports         BankImport[]
+  bankTransactions    BankTransaction[]
 
   @@index([deletedAt])
 }
@@ -595,6 +630,7 @@ model Case {
   enforcementTitles   EnforcementTitle[]
   enforcementActions  EnforcementAction[]
   communications      CommunicationEvent[]
+  bankTransactions     BankTransaction[]
 
   @@unique([tenantId, caseNumber])
   @@unique([tenantId, sequenceYear, sequenceNumber])
@@ -712,6 +748,7 @@ model CaseLedgerEntry {
   costCalculation     CaseCostCalculation? @relation(fields: [costCalculationId], references: [id], onDelete: Restrict)
   paymentAllocations  PaymentAllocation[]  @relation("PaymentAllocations")
   targetAllocations   PaymentAllocation[]  @relation("TargetAllocations")
+  bankTransaction     BankTransaction?
 
   @@index([tenantId, caseId, bookingDate])
   @@index([caseId, status])
@@ -743,6 +780,92 @@ model PaymentAllocation {
   @@unique([paymentEntryId, allocationOrder])
   @@index([tenantId, caseId, status])
   @@index([targetEntryId, status])
+}
+
+model BankImport {
+  id                     String           @id @default(uuid()) @db.Uuid
+  tenantId               String           @db.Uuid
+  fileName               String
+  fileFormat             BankFileFormat
+  fileHash               String
+  storageKey             String
+  mimeType               String
+  fileSize               Int
+  status                 BankImportStatus @default(PROCESSING)
+  importedByMembershipId String           @db.Uuid
+  importedAt             DateTime         @default(now())
+  transactionCount       Int              @default(0)
+  matchedCount           Int              @default(0)
+  bookedCount            Int              @default(0)
+  reviewCount            Int              @default(0)
+  duplicateCount         Int              @default(0)
+  errorCount             Int              @default(0)
+  errorMessage           String?
+  createdAt              DateTime         @default(now())
+  updatedAt              DateTime         @updatedAt
+
+  tenant       Tenant            @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  importedBy   TenantMembership  @relation("BankImportImportedBy", fields: [importedByMembershipId], references: [id], onDelete: Restrict)
+  transactions BankTransaction[]
+
+  @@unique([tenantId, fileHash])
+  @@index([tenantId, importedAt])
+  @@index([tenantId, status, importedAt])
+  @@index([importedByMembershipId])
+}
+
+model BankTransaction {
+  id                     String                   @id @default(uuid()) @db.Uuid
+  tenantId               String                   @db.Uuid
+  bankImportId           String                   @db.Uuid
+  externalTransactionId  String?
+  bookingDate            DateTime                 @db.Date
+  valueDate              DateTime?                @db.Date
+  amount                 Decimal                  @db.Decimal(15, 2)
+  currency               String                   @db.Char(3)
+  direction              BankTransactionDirection
+  debtorName             String?
+  debtorIban             String?
+  creditorName           String?
+  creditorIban           String?
+  purpose                String
+  bankReference          String?
+  endToEndId             String?
+  mandateReference       String?
+  creditorReference      String?
+  bankTransactionCode    String?
+  transactionKey         String
+  normalizedData         Json?
+  status                 BankTransactionStatus    @default(IMPORTED)
+  matchedCaseId          String?                  @db.Uuid
+  matchedPartyId         String?                  @db.Uuid
+  paymentId              String?                  @unique @db.Uuid
+  duplicateOfId          String?                  @db.Uuid
+  matchScore             Int?
+  matchReason            String?
+  ignoreReason           String?
+  reviewedByMembershipId String?                  @db.Uuid
+  reviewedAt             DateTime?
+  createdAt              DateTime                 @default(now())
+  updatedAt              DateTime                 @updatedAt
+
+  tenant       Tenant            @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  bankImport   BankImport        @relation(fields: [bankImportId], references: [id], onDelete: Restrict)
+  matchedCase  Case?             @relation(fields: [matchedCaseId], references: [id], onDelete: Restrict)
+  matchedParty Party?            @relation(fields: [matchedPartyId], references: [id], onDelete: Restrict)
+  payment      CaseLedgerEntry?  @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  reviewedBy   TenantMembership? @relation("BankTransactionReviewedBy", fields: [reviewedByMembershipId], references: [id], onDelete: Restrict)
+  duplicateOf  BankTransaction?  @relation("BankTransactionDuplicate", fields: [duplicateOfId], references: [id], onDelete: Restrict)
+  duplicates   BankTransaction[] @relation("BankTransactionDuplicate")
+
+  @@index([tenantId, status, bookingDate])
+  @@index([tenantId, bankImportId, status])
+  @@index([tenantId, transactionKey])
+  @@index([tenantId, externalTransactionId])
+  @@index([matchedCaseId])
+  @@index([matchedPartyId])
+  @@index([reviewedByMembershipId])
+  @@index([duplicateOfId])
 }
 
 model DocumentTemplate {
@@ -992,6 +1115,7 @@ model Party {
   installmentPlans    InstallmentPlan[]
   activityEvents      ActivityEvent[]
   communications      CommunicationEvent[]
+  bankTransactions     BankTransaction[]
 
   @@index([tenantId, deletedAt, displayName])
   @@index([tenantId, type, deletedAt])
@@ -1461,6 +1585,8 @@ model TenantMembership {
   identityVerifiedDataSubjectRequests DataSubjectRequest[] @relation("DataSubjectIdentityVerifiedBy")
   generatedDataSubjectAccessExports DataSubjectAccessExport[] @relation("DataSubjectExportGeneratedBy")
   reviewedDataSubjectReviews DataSubjectDataReview[] @relation("DataSubjectReviewBy")
+  importedBankFiles BankImport[] @relation("BankImportImportedBy")
+  reviewedBankTransactions BankTransaction[] @relation("BankTransactionReviewedBy")
 
   @@unique([tenantId, userId])
   @@index([userId, deletedAt])

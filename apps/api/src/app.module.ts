@@ -23,6 +23,7 @@ import { EnforcementModule } from "./enforcement/enforcement.module";
 import { HealthModule } from "./health/health.module";
 import { ClientContactsModule } from "./client-contacts/client-contacts.module";
 import { DataSubjectRequestsModule } from "./data-subject-requests/data-subject-requests.module";
+import { BankImportsModule } from "./bank-imports/bank-imports.module";
 
 @Module({
   imports: [
@@ -35,6 +36,7 @@ import { DataSubjectRequestsModule } from "./data-subject-requests/data-subject-
     PartiesModule,
     ClientContactsModule,
     DataSubjectRequestsModule,
+    BankImportsModule,
     CasesModule,
     LedgerModule,
     LegalReferencesModule,

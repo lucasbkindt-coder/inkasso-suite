@@ -18,6 +18,7 @@ const navigationPermissions: Record<string, string[]> = {
   "/akten": ["case:read"],
   "/parteien": ["debtor:read"],
   "/schuldner": ["debtor:read"],
+  "/zahlungen/import": ["bank-import:read"],
   "/aufgaben": ["case:read"],
   "/auftragseingang": ["case:read"],
   "/ratenanfragen": ["case:read"],
@@ -107,7 +108,6 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
     </aside>
   );
 }
-
 export function AppShell({ children }: { children: React.ReactNode }) {
   const [isMobileNavigationOpen, setMobileNavigationOpen] = React.useState(false);
   const pathname = usePathname();

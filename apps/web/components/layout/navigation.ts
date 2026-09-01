@@ -2,6 +2,7 @@ import {
   Building2,
   FolderKanban,
   LayoutDashboard,
+  Landmark,
   ListTodo,
   Settings,
   ShieldCheck,
@@ -20,6 +21,7 @@ export const navigationGroups = [
       { href: "/akten", label: "Inkassoakten", icon: FolderKanban },
       { href: "/parteien", label: "Parteien", icon: UsersRound },
       { href: "/schuldner", label: "Schuldner", icon: Users },
+      { href: "/zahlungen/import", label: "Bankimport", icon: Landmark },
     ],
   },
   {
@@ -51,6 +53,7 @@ export const pageTitles: Record<string, string> = {
   "/ratenanfragen": "Ratenanfragen",
   "/mandanten": "Mandanten",
   "/zahlungen": "Zahlungen",
+  "/zahlungen/import": "Bankimport",
   "/dokumente": "Dokumente",
   "/benutzer": "Benutzer",
   "/einstellungen": "Einstellungen",
