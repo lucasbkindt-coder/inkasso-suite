@@ -9,7 +9,7 @@ import { staffAuthApi } from "@/lib/staff-auth-api";
 
 export function StaffLoginPage() {
   const router = useRouter();
-  const [email, setEmail] = React.useState("admin@example.com");
+  const [email, setEmail] = React.useState("");
   const [password, setPassword] = React.useState("");
   const [memberships, setMemberships] = React.useState<{ membershipId: string; tenant: { id: string; name: string; slug: string }; roles: string[] }[]>([]);
   const [membershipId, setMembershipId] = React.useState("");

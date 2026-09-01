@@ -1,3 +1,3 @@
-import { StaffLoginPage } from "@/components/staff-auth/staff-login-page";
+import { redirect } from "next/navigation";
 
-export default function LoginPage() { return <StaffLoginPage />; }
+export default function LoginPage() { redirect("/staff/login"); }
