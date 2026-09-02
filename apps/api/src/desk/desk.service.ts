@@ -1,4 +1,4 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import {
   ActivityEventType,
   CommunicationChannel,
@@ -36,6 +36,8 @@ const ticketDetailInclude = {
     include: {
       createdByMembership: { select: { id: true, user: { select: { displayName: true, email: true } } } },
       attachments: { orderBy: { createdAt: "asc" as const } },
+      mailMessage: true,
+      mailDraft: { select: { id: true, status: true } },
     },
     orderBy: [{ occurredAt: "asc" as const }, { id: "asc" as const }],
   },
@@ -187,6 +189,7 @@ export class DeskService {
   async update(id: string, dto: UpdateDeskTicketDto) {
     const tenantId = await this.tenant.getTenantId();
     const current = await this.findTicket(id, tenantId);
+    if (dto.expectedVersion !== current.version) throw new ConflictException("Das Ticket wurde zwischenzeitlich geändert. Bitte neu laden.");
     if (dto.assigneeMembershipId !== undefined || dto.teamId !== undefined) this.requireAssignPermission();
     const partyId = dto.partyId === undefined ? current.partyId : dto.partyId;
     const caseId = dto.caseId === undefined ? current.caseId : dto.caseId;
@@ -198,8 +201,8 @@ export class DeskService {
     const terminal = dto.status === DeskTicketStatus.RESOLVED || dto.status === DeskTicketStatus.CLOSED;
     const reopened = dto.status && !terminal;
     return this.prisma.$transaction(async (tx) => {
-      const ticket = await tx.deskTicket.update({
-        where: { id },
+      const changed = await tx.deskTicket.updateMany({
+        where: { id, tenantId, version: dto.expectedVersion },
         data: {
           subject: dto.subject?.trim(),
           status: dto.status,
@@ -210,8 +213,11 @@ export class DeskService {
           assigneeMembershipId: dto.assigneeMembershipId,
           teamId: dto.teamId,
           closedAt: terminal ? new Date() : reopened ? null : undefined,
+          version: { increment: 1 },
         },
       });
+      if (!changed.count) throw new ConflictException("Das Ticket wurde zwischenzeitlich geändert. Bitte neu laden.");
+      const ticket = await tx.deskTicket.findUniqueOrThrow({ where: { id } });
       if (dto.status && dto.status !== current.status) {
         await this.record(tx, ticket.id, ActivityEventType.DESK_TICKET_STATUS_CHANGED, { previousStatus: current.status, status: ticket.status }, ticket.caseId, ticket.partyId);
       }
@@ -238,7 +244,7 @@ export class DeskService {
     if (!message) throw new BadRequestException("Eine interne Notiz ist erforderlich.");
     return this.prisma.$transaction(async (tx) => {
       await this.createNoteInTransaction(tx, ticket, message);
-      await tx.deskTicket.update({ where: { id: ticket.id }, data: { updatedAt: new Date() } });
+      await tx.deskTicket.update({ where: { id: ticket.id }, data: { updatedAt: new Date(), version: { increment: 1 } } });
       return this.findOneWithClient(tx, ticket.id, tenantId);
     });
   }

@@ -28,6 +28,7 @@ import { AddressResearchModule } from "./address-research/address-research.modul
 import { CreditReportingModule } from "./credit-reporting/credit-reporting.module";
 import { ZohoDeskModule } from "./integrations/zoho-desk/zoho-desk.module";
 import { DeskModule } from "./desk/desk.module";
+import { DeskMailModule } from "./desk-mail/desk-mail.module";
 
 @Module({
   imports: [
@@ -45,6 +46,7 @@ import { DeskModule } from "./desk/desk.module";
     CreditReportingModule,
     ZohoDeskModule,
     DeskModule,
+    DeskMailModule,
     CasesModule,
     LedgerModule,
     LegalReferencesModule,

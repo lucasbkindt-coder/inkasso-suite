@@ -428,6 +428,74 @@ enum DeskTicketPriority {
   URGENT
 }
 
+enum DeskTicketSource {
+  MANUAL
+  EMAIL
+}
+
+enum MailAccountProvider {
+  GENERIC_SMTP_IMAP
+  MOCK
+}
+
+enum MailAccountStatus {
+  NOT_CONFIGURED
+  ACTIVE
+  DISABLED
+  ERROR
+}
+
+enum MailMessageDirection {
+  INBOUND
+  OUTBOUND
+}
+
+enum MailDeliveryStatus {
+  PENDING
+  SENT
+  DELIVERED
+  BOUNCED
+  FAILED
+}
+
+enum MailReviewStatus {
+  PENDING
+  RESOLVED
+  IGNORED
+}
+
+enum MailReviewReason {
+  PARTY_AMBIGUOUS
+  CASE_AMBIGUOUS
+  THREAD_AMBIGUOUS
+  MALFORMED_MAIL
+  BLOCKED_ATTACHMENT
+  PROCESSING_RESTRICTION
+  UNMATCHED_CONTEXT
+}
+
+enum MailDraftStatus {
+  DRAFT
+  QUEUED
+  SENT
+  CANCELLED
+}
+
+enum OutboundMailJobStatus {
+  QUEUED
+  PROCESSING
+  SENT
+  FAILED
+  RETRY
+  CANCELLED
+}
+
+enum EmailContactPreference {
+  EMAIL_ALLOWED
+  EMAIL_BLOCKED
+  UNKNOWN
+}
+
 enum InstallmentRequestStatus {
   SUBMITTED
   UNDER_REVIEW
@@ -555,6 +623,15 @@ enum ActivityEventType {
   DESK_TICKET_PARTY_LINKED
   DESK_TICKET_CASE_LINKED
   DESK_TICKET_COMMENT_ADDED
+  DESK_MAIL_INBOUND_IMPORTED
+  DESK_MAIL_REVIEW_RESOLVED
+  DESK_MAIL_DRAFT_CREATED
+  DESK_MAIL_DRAFT_UPDATED
+  DESK_MAIL_QUEUED
+  DESK_MAIL_SENT
+  DESK_MAIL_FAILED
+  DESK_MAIL_ATTACHMENT_IMPORTED
+  DESK_MAIL_READ
 }
 
 enum CommunicationDirection {
@@ -725,6 +802,15 @@ model Tenant {
   externalIntegrationLinks ExternalIntegrationLink[]
   deskTickets              DeskTicket[]
   deskTicketSequences      DeskTicketNumberSequence[]
+  mailAccounts             MailAccount[]
+  mailMessages             MailMessage[]
+  mailReviewItems          MailReviewItem[]
+  mailDrafts               MailDraft[]
+  outboundMailJobs         OutboundMailJob[]
+  deskCannedResponses      DeskCannedResponse[]
+  deskMailSettings         DeskMailSettings?
+  deskMailUserSignatures   DeskMailUserSignature[]
+  mailContactPreferences   MailContactPreference[]
 
   @@index([deletedAt])
 }
@@ -772,6 +858,7 @@ model Case {
   creditBureauReports      CreditBureauReport[]
   externalIntegrationLinks ExternalIntegrationLink[]
   deskTickets              DeskTicket[]
+  mailReviewItems          MailReviewItem[]
 
   @@unique([tenantId, caseNumber])
   @@unique([tenantId, sequenceYear, sequenceNumber])
@@ -1274,6 +1361,8 @@ model Party {
   addressResearchRequests     AddressResearchRequest[]
   creditBureauReports         CreditBureauReport[]
   deskTickets                 DeskTicket[]
+  mailReviewItems             MailReviewItem[]          @relation("MailReviewSuggestedParty")
+  mailContactPreferences      MailContactPreference[]
 
   @@index([tenantId, deletedAt, displayName])
   @@index([tenantId, type, deletedAt])
@@ -1408,11 +1497,12 @@ model ClientContact {
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
 
-  tenant              Tenant               @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-  party               Party                @relation(fields: [partyId], references: [id], onDelete: Restrict)
-  createdByMembership TenantMembership?    @relation("ClientContactCreatedBy", fields: [createdByMembershipId], references: [id], onDelete: Restrict)
-  portalAccount       PortalAccount?
-  dataSubjectRequests DataSubjectRequest[]
+  tenant                 Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  party                  Party                   @relation(fields: [partyId], references: [id], onDelete: Restrict)
+  createdByMembership    TenantMembership?       @relation("ClientContactCreatedBy", fields: [createdByMembershipId], references: [id], onDelete: Restrict)
+  portalAccount          PortalAccount?
+  dataSubjectRequests    DataSubjectRequest[]
+  mailContactPreferences MailContactPreference[]
 
   @@index([tenantId, partyId, isActive, isPrimary])
   @@index([partyId, isActive])
@@ -1569,7 +1659,7 @@ model CommunicationEvent {
   summary               String
   externalReference     String?
   durationSeconds       Int?
-  createdByMembershipId String                 @db.Uuid
+  createdByMembershipId String?                @db.Uuid
   createdAt             DateTime               @default(now())
   updatedAt             DateTime               @updatedAt
 
@@ -1577,9 +1667,11 @@ model CommunicationEvent {
   party                    Party?                    @relation(fields: [partyId], references: [id], onDelete: Restrict)
   case                     Case?                     @relation(fields: [caseId], references: [id], onDelete: Restrict)
   deskTicket               DeskTicket?               @relation(fields: [deskTicketId], references: [id], onDelete: Restrict)
-  createdByMembership      TenantMembership          @relation("CommunicationCreatedBy", fields: [createdByMembershipId], references: [id], onDelete: Restrict)
+  createdByMembership      TenantMembership?         @relation("CommunicationCreatedBy", fields: [createdByMembershipId], references: [id], onDelete: Restrict)
   attachments              CommunicationAttachment[]
   externalIntegrationLinks ExternalIntegrationLink[]
+  mailMessage              MailMessage?
+  mailDraft                MailDraft?
 
   @@index([tenantId, partyId, occurredAt])
   @@index([tenantId, caseId, occurredAt])
@@ -1844,7 +1936,8 @@ model Contact {
   updatedAt DateTime    @updatedAt
   deletedAt DateTime?
 
-  party Party @relation(fields: [partyId], references: [id], onDelete: Restrict)
+  party                  Party                   @relation(fields: [partyId], references: [id], onDelete: Restrict)
+  mailContactPreferences MailContactPreference[]
 
   @@index([partyId, deletedAt, isPrimary])
   @@index([partyId, type, deletedAt])
@@ -1921,6 +2014,10 @@ model TenantMembership {
   creditBureauReportEvents            CreditBureauReportEvent[] @relation("CreditReportEventActor")
   assignedDeskTickets                 DeskTicket[]              @relation("DeskTicketAssignee")
   createdDeskTickets                  DeskTicket[]              @relation("DeskTicketCreatedBy")
+  resolvedMailReviewItems             MailReviewItem[]          @relation("MailReviewResolvedBy")
+  createdMailDrafts                   MailDraft[]               @relation("MailDraftCreatedBy")
+  updatedMailDrafts                   MailDraft[]               @relation("MailDraftUpdatedBy")
+  deskMailUserSignature               DeskMailUserSignature?
 
   @@unique([tenantId, userId])
   @@index([userId, deletedAt])
@@ -1972,7 +2069,9 @@ model DeskTicket {
   subject               String             @db.VarChar(300)
   status                DeskTicketStatus   @default(OPEN)
   priority              DeskTicketPriority @default(NORMAL)
+  source                DeskTicketSource   @default(MANUAL)
   category              String?            @db.VarChar(100)
+  mailAccountId         String?            @db.Uuid
   partyId               String?            @db.Uuid
   caseId                String?            @db.Uuid
   assigneeMembershipId  String?            @db.Uuid
@@ -1981,8 +2080,12 @@ model DeskTicket {
   createdAt             DateTime           @default(now())
   updatedAt             DateTime           @updatedAt
   closedAt              DateTime?
+  unreadAt              DateTime?
+  readAt                DateTime?
+  version               Int                @default(1)
 
   tenant              Tenant               @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  mailAccount         MailAccount?         @relation(fields: [mailAccountId], references: [id], onDelete: Restrict)
   party               Party?               @relation(fields: [partyId], references: [id], onDelete: Restrict)
   case                Case?                @relation(fields: [caseId], references: [id], onDelete: Restrict)
   assigneeMembership  TenantMembership?    @relation("DeskTicketAssignee", fields: [assigneeMembershipId], references: [id], onDelete: Restrict)
@@ -1990,6 +2093,8 @@ model DeskTicket {
   createdByMembership TenantMembership?    @relation("DeskTicketCreatedBy", fields: [createdByMembershipId], references: [id], onDelete: Restrict)
   communications      CommunicationEvent[]
   activityEvents      ActivityEvent[]
+  mailDrafts          MailDraft[]
+  mailReviewItems     MailReviewItem[]
 
   @@unique([tenantId, number])
   @@unique([tenantId, sequenceYear, sequenceNumber])
@@ -1997,8 +2102,238 @@ model DeskTicket {
   @@index([tenantId, priority, updatedAt])
   @@index([tenantId, assigneeMembershipId, status])
   @@index([tenantId, teamId, status])
+  @@index([tenantId, source, unreadAt])
+  @@index([mailAccountId, updatedAt])
   @@index([partyId, updatedAt])
   @@index([caseId, updatedAt])
+}
+
+model MailAccount {
+  id                String              @id @default(uuid()) @db.Uuid
+  tenantId          String              @db.Uuid
+  name              String              @db.VarChar(150)
+  emailAddress      String              @db.VarChar(320)
+  displayName       String?             @db.VarChar(200)
+  provider          MailAccountProvider
+  status            MailAccountStatus   @default(NOT_CONFIGURED)
+  isDefault         Boolean             @default(false)
+  inboundEnabled    Boolean             @default(false)
+  outboundEnabled   Boolean             @default(false)
+  outboundRateLimit Int?
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+
+  tenant       Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  credential   MailAccountCredential?
+  tickets      DeskTicket[]
+  messages     MailMessage[]
+  reviewItems  MailReviewItem[]
+  drafts       MailDraft[]
+  outboundJobs OutboundMailJob[]
+
+  @@unique([tenantId, emailAddress])
+  @@index([tenantId, status, isDefault])
+}
+
+model MailAccountCredential {
+  id                String   @id @default(uuid()) @db.Uuid
+  mailAccountId     String   @unique @db.Uuid
+  encryptedPayload  String   @db.Text
+  encryptionVersion Int      @default(1)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  mailAccount MailAccount @relation(fields: [mailAccountId], references: [id], onDelete: Restrict)
+}
+
+model MailMessage {
+  id                   String               @id @default(uuid()) @db.Uuid
+  tenantId             String               @db.Uuid
+  communicationEventId String               @unique @db.Uuid
+  mailAccountId        String               @db.Uuid
+  direction            MailMessageDirection
+  messageId            String?              @db.VarChar(998)
+  idempotencyKey       String               @db.VarChar(128)
+  inReplyTo            String?              @db.VarChar(998)
+  references           String[]
+  subject              String               @db.VarChar(998)
+  fromAddress          String               @db.VarChar(320)
+  toAddresses          String[]
+  ccAddresses          String[]
+  bccAddresses         String[]
+  sanitizedHtml        String?              @db.Text
+  sentAt               DateTime?
+  receivedAt           DateTime?
+  providerExternalId   String?              @db.VarChar(300)
+  deliveryStatus       MailDeliveryStatus   @default(PENDING)
+  rawMessageStored     Boolean              @default(false)
+  autoSubmitted        String?              @db.VarChar(100)
+  precedence           String?              @db.VarChar(100)
+  autoResponseSuppress String?              @db.VarChar(200)
+  createdAt            DateTime             @default(now())
+  updatedAt            DateTime             @updatedAt
+
+  tenant             Tenant             @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  communicationEvent CommunicationEvent @relation(fields: [communicationEventId], references: [id], onDelete: Restrict)
+  mailAccount        MailAccount        @relation(fields: [mailAccountId], references: [id], onDelete: Restrict)
+  reviewItems        MailReviewItem[]
+  outboundJobs       OutboundMailJob[]
+
+  @@unique([tenantId, idempotencyKey])
+  @@index([tenantId, messageId])
+  @@index([tenantId, inReplyTo])
+  @@index([tenantId, direction, receivedAt])
+  @@index([mailAccountId, deliveryStatus, createdAt])
+}
+
+model MailReviewItem {
+  id                     String           @id @default(uuid()) @db.Uuid
+  tenantId               String           @db.Uuid
+  mailAccountId          String?          @db.Uuid
+  mailMessageId          String?          @db.Uuid
+  deskTicketId           String?          @db.Uuid
+  reason                 MailReviewReason
+  status                 MailReviewStatus @default(PENDING)
+  summary                String           @db.VarChar(500)
+  suggestedPartyId       String?          @db.Uuid
+  suggestedCaseId        String?          @db.Uuid
+  resolvedByMembershipId String?          @db.Uuid
+  resolvedAt             DateTime?
+  resolutionNote         String?          @db.VarChar(1000)
+  createdAt              DateTime         @default(now())
+  updatedAt              DateTime         @updatedAt
+
+  tenant         Tenant            @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  mailAccount    MailAccount?      @relation(fields: [mailAccountId], references: [id], onDelete: Restrict)
+  mailMessage    MailMessage?      @relation(fields: [mailMessageId], references: [id], onDelete: Restrict)
+  deskTicket     DeskTicket?       @relation(fields: [deskTicketId], references: [id], onDelete: Restrict)
+  suggestedParty Party?            @relation("MailReviewSuggestedParty", fields: [suggestedPartyId], references: [id], onDelete: Restrict)
+  suggestedCase  Case?             @relation(fields: [suggestedCaseId], references: [id], onDelete: Restrict)
+  resolvedBy     TenantMembership? @relation("MailReviewResolvedBy", fields: [resolvedByMembershipId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId, status, createdAt])
+  @@index([deskTicketId, status])
+  @@index([mailMessageId])
+}
+
+model MailDraft {
+  id                    String          @id @default(uuid()) @db.Uuid
+  tenantId              String          @db.Uuid
+  ticketId              String          @db.Uuid
+  mailAccountId         String          @db.Uuid
+  communicationEventId  String          @unique @db.Uuid
+  status                MailDraftStatus @default(DRAFT)
+  toAddresses           String[]
+  ccAddresses           String[]
+  subject               String          @db.VarChar(998)
+  bodyPlain             String          @db.Text
+  bodyHtml              String?         @db.Text
+  inReplyTo             String?         @db.VarChar(998)
+  references            String[]
+  createdByMembershipId String          @db.Uuid
+  updatedByMembershipId String          @db.Uuid
+  version               Int             @default(1)
+  createdAt             DateTime        @default(now())
+  updatedAt             DateTime        @updatedAt
+
+  tenant              Tenant             @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  ticket              DeskTicket         @relation(fields: [ticketId], references: [id], onDelete: Restrict)
+  mailAccount         MailAccount        @relation(fields: [mailAccountId], references: [id], onDelete: Restrict)
+  communicationEvent  CommunicationEvent @relation(fields: [communicationEventId], references: [id], onDelete: Restrict)
+  createdByMembership TenantMembership   @relation("MailDraftCreatedBy", fields: [createdByMembershipId], references: [id], onDelete: Restrict)
+  updatedByMembership TenantMembership   @relation("MailDraftUpdatedBy", fields: [updatedByMembershipId], references: [id], onDelete: Restrict)
+  outboundJob         OutboundMailJob?
+
+  @@index([tenantId, ticketId, status])
+  @@index([mailAccountId, status])
+}
+
+model OutboundMailJob {
+  id               String                @id @default(uuid()) @db.Uuid
+  tenantId         String                @db.Uuid
+  draftId          String                @unique @db.Uuid
+  mailAccountId    String                @db.Uuid
+  mailMessageId    String?               @db.Uuid
+  status           OutboundMailJobStatus @default(QUEUED)
+  attempts         Int                   @default(0)
+  maxAttempts      Int                   @default(3)
+  nextAttemptAt    DateTime              @default(now())
+  lockedAt         DateTime?
+  lastErrorCode    String?               @db.VarChar(100)
+  lastErrorMessage String?               @db.VarChar(1000)
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
+
+  tenant      Tenant       @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  draft       MailDraft    @relation(fields: [draftId], references: [id], onDelete: Restrict)
+  mailAccount MailAccount  @relation(fields: [mailAccountId], references: [id], onDelete: Restrict)
+  mailMessage MailMessage? @relation(fields: [mailMessageId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId, status, nextAttemptAt])
+  @@index([mailAccountId, status, nextAttemptAt])
+}
+
+model DeskMailSettings {
+  id                   String   @id @default(uuid()) @db.Uuid
+  tenantId             String   @unique @db.Uuid
+  globalSignaturePlain String?  @db.Text
+  globalSignatureHtml  String?  @db.Text
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+}
+
+model DeskMailUserSignature {
+  id           String   @id @default(uuid()) @db.Uuid
+  tenantId     String   @db.Uuid
+  membershipId String   @unique @db.Uuid
+  bodyPlain    String   @db.Text
+  bodyHtml     String?  @db.Text
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  tenant     Tenant           @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  membership TenantMembership @relation(fields: [membershipId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId])
+}
+
+model DeskCannedResponse {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @db.Uuid
+  name      String   @db.VarChar(150)
+  subject   String?  @db.VarChar(998)
+  body      String   @db.Text
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+
+  @@unique([tenantId, name])
+  @@index([tenantId, isActive])
+}
+
+model MailContactPreference {
+  id              String                 @id @default(uuid()) @db.Uuid
+  tenantId        String                 @db.Uuid
+  partyId         String?                @db.Uuid
+  contactId       String?                @db.Uuid
+  clientContactId String?                @db.Uuid
+  preference      EmailContactPreference @default(UNKNOWN)
+  reason          String?                @db.VarChar(500)
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
+
+  tenant        Tenant         @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  party         Party?         @relation(fields: [partyId], references: [id], onDelete: Restrict)
+  contact       Contact?       @relation(fields: [contactId], references: [id], onDelete: Restrict)
+  clientContact ClientContact? @relation(fields: [clientContactId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId, partyId])
+  @@index([tenantId, contactId])
+  @@index([tenantId, clientContactId])
 }
 
 model TeamMembership {

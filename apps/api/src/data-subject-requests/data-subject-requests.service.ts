@@ -306,7 +306,15 @@ export class DataSubjectRequestsService {
   }
 
   private async snapshot(item: Awaited<ReturnType<DataSubjectRequestsService["find"]>>) {
-    if (item.clientContact) return { version: 1, generatedAt: new Date().toISOString(), subject: { type: "CLIENT_CONTACT", firstName: item.clientContact.firstName, lastName: item.clientContact.lastName, email: item.clientContact.email, phone: item.clientContact.phone, mobile: item.clientContact.mobile, position: item.clientContact.position, isPrimary: item.clientContact.isPrimary, portalAccount: item.clientContact.portalAccount } };
+    if (item.clientContact) {
+      const email = item.clientContact.email?.trim().toLowerCase();
+      const mailMessages = email ? await this.prisma.mailMessage.findMany({
+        where: { tenantId: item.tenantId, OR: [{ fromAddress: { equals: email, mode: "insensitive" } }, { toAddresses: { has: email } }, { ccAddresses: { has: email } }] },
+        select: { direction: true, messageId: true, inReplyTo: true, references: true, subject: true, fromAddress: true, toAddresses: true, ccAddresses: true, sentAt: true, receivedAt: true, deliveryStatus: true, communicationEvent: { select: { occurredAt: true, summary: true } } },
+        orderBy: { createdAt: "asc" },
+      }) : [];
+      return { version: 1, generatedAt: new Date().toISOString(), subject: { type: "CLIENT_CONTACT", firstName: item.clientContact.firstName, lastName: item.clientContact.lastName, email: item.clientContact.email, phone: item.clientContact.phone, mobile: item.clientContact.mobile, position: item.clientContact.position, isPrimary: item.clientContact.isPrimary, portalAccount: item.clientContact.portalAccount }, mailMessages };
+    }
     const party = item.subjectParty!;
     const cases = await this.prisma.case.findMany({
       where: { tenantId: item.tenantId, OR: [{ clientPartyId: party.id }, { debtorPartyId: party.id }], deletedAt: null },
@@ -340,7 +348,7 @@ export class DataSubjectRequestsService {
       this.prisma.paymentAllocation.findMany({ where: caseWhere, select: { caseId: true, amount: true, policy: true, allocationOrder: true, status: true, createdAt: true, reversedAt: true } }),
       this.prisma.caseTask.findMany({ where: caseWhere, select: { caseId: true, type: true, status: true, priority: true, title: true, description: true, dueAt: true, followUpAt: true, completedAt: true, cancelledAt: true } }),
       this.prisma.caseDocument.findMany({ where: caseWhere, select: { caseId: true, type: true, status: true, portalVisibility: true, filename: true, mimeType: true, renderedSubject: true, renderedBody: true, generatedAt: true, sentAt: true, voidedAt: true } }),
-      this.prisma.communicationEvent.findMany({ where: { tenantId: item.tenantId, partyId: party.id }, select: { occurredAt: true, direction: true, channel: true, subject: true, summary: true, attachments: { select: { originalFileName: true, mimeType: true, size: true, sha256: true, createdAt: true } } } }),
+      this.prisma.communicationEvent.findMany({ where: { tenantId: item.tenantId, partyId: party.id }, select: { occurredAt: true, direction: true, channel: true, subject: true, summary: true, attachments: { select: { attachmentType: true, originalFileName: true, mimeType: true, size: true, sha256: true, createdAt: true } }, mailMessage: { select: { direction: true, messageId: true, inReplyTo: true, references: true, fromAddress: true, toAddresses: true, ccAddresses: true, sentAt: true, receivedAt: true, deliveryStatus: true, rawMessageStored: true } } } }),
       this.prisma.deskTicket.findMany({ where: { tenantId: item.tenantId, partyId: party.id }, select: { number: true, subject: true, status: true, priority: true, category: true, createdAt: true, updatedAt: true, closedAt: true }, orderBy: { createdAt: "asc" } }),
       this.prisma.installmentRequest.findMany({ where: { tenantId: item.tenantId, debtorPartyId: party.id }, select: { caseId: true, status: true, requestedMonthlyAmount: true, preferredStartDate: true, numberOfInstallments: true, debtorMessage: true, submittedAt: true, reviewedAt: true, approvedAt: true, rejectedAt: true } }),
       this.prisma.installmentPlan.findMany({ where: { tenantId: item.tenantId, debtorPartyId: party.id }, select: { caseId: true, source: true, status: true, initialOpenAmount: true, plannedInstallmentAmount: true, startDate: true, numberOfInstallments: true, activatedAt: true, completedAt: true, cancelledAt: true, items: { select: { sequenceNumber: true, dueDate: true, plannedAmount: true, status: true, completedAt: true } } } }),

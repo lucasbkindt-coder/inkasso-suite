@@ -1,6 +1,6 @@
 "use client";
 
-import { Headphones, Inbox, LayoutDashboard, LogOut, Moon, Plus, Sun, UserRoundCheck } from "lucide-react";
+import { Headphones, Inbox, LayoutDashboard, LogOut, Mail, Moon, Plus, ShieldAlert, Sun, UserRoundCheck } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useTheme } from "next-themes";
@@ -11,6 +11,8 @@ import { DeskSessionContext } from "./desk-auth-gate";
 
 const nav = [
   { label: "Übersicht", href: "/", icon: LayoutDashboard, view: null },
+  { label: "Posteingang", href: "/inbox", icon: Mail, view: "inbox" },
+  { label: "Review", href: "/review", icon: ShieldAlert, view: "review" },
   { label: "Meine Tickets", href: "/tickets?mine=true", icon: UserRoundCheck, view: "mine" },
   { label: "Alle Tickets", href: "/tickets", icon: Inbox, view: "all" },
   { label: "Nicht zugewiesen", href: "/tickets?unassigned=true", icon: Inbox, view: "unassigned" },
@@ -32,6 +34,8 @@ export function DeskShell({ children }: { children: React.ReactNode }) {
 
   function active(view: (typeof nav)[number]["view"]) {
     if (view === null) return pathname === "/";
+    if (view === "inbox") return pathname === "/inbox";
+    if (view === "review") return pathname === "/review";
     if (pathname !== "/tickets") return false;
     if (view === "mine") return search.get("mine") === "true";
     if (view === "unassigned") return search.get("unassigned") === "true";

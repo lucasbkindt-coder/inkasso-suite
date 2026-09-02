@@ -7,6 +7,7 @@ export type DeskTicket = {
   subject: string;
   status: DeskTicketStatus;
   priority: DeskTicketPriority;
+  source: "MANUAL" | "EMAIL";
   category: string | null;
   partyId: string | null;
   caseId: string | null;
@@ -15,6 +16,9 @@ export type DeskTicket = {
   createdAt: string;
   updatedAt: string;
   closedAt: string | null;
+  unreadAt: string | null;
+  readAt: string | null;
+  version: number;
   party: { id: string; displayName: string; type: "PERSON" | "COMPANY"; processingRestrictedAt: string | null } | null;
   case: { id: string; caseNumber: string } | null;
   assigneeMembership: { id: string; user: { displayName: string | null; email: string } } | null;
@@ -30,8 +34,10 @@ export type DeskTicketDetail = DeskTicket & {
     occurredAt: string;
     subject: string | null;
     summary: string;
-    createdByMembership: { id: string; user: { displayName: string | null; email: string } };
+    createdByMembership: { id: string; user: { displayName: string | null; email: string } } | null;
     attachments: { id: string; originalFileName: string; mimeType: string; size: number }[];
+    mailMessage: { id: string; direction: "INBOUND" | "OUTBOUND"; fromAddress: string; toAddresses: string[]; ccAddresses: string[]; deliveryStatus: "PENDING" | "SENT" | "DELIVERED" | "BOUNCED" | "FAILED"; sentAt: string | null; receivedAt: string | null; sanitizedHtml: string | null } | null;
+    mailDraft: { id: string; status: "DRAFT" | "QUEUED" | "SENT" | "CANCELLED" } | null;
   }[];
   openTasks: { id: string; title: string; status: string; priority: string; dueAt: string | null }[];
 };
@@ -70,7 +76,7 @@ export const deskApi = {
   tickets: (params: URLSearchParams) => request<DeskTicketList>(`/tickets?${params.toString()}`),
   ticket: (id: string) => request<DeskTicketDetail>(`/tickets/${id}`),
   create: (payload: CreateDeskTicketPayload) => request<DeskTicketDetail>("/tickets", { method: "POST", body: JSON.stringify(payload) }),
-  update: (id: string, payload: Partial<{ subject: string; status: DeskTicketStatus; priority: DeskTicketPriority; category: string | null; partyId: string | null; caseId: string | null; assigneeMembershipId: string | null; teamId: string | null }>) => request<DeskTicketDetail>(`/tickets/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
+  update: (id: string, payload: { expectedVersion: number } & Partial<{ subject: string; status: DeskTicketStatus; priority: DeskTicketPriority; category: string | null; partyId: string | null; caseId: string | null; assigneeMembershipId: string | null; teamId: string | null }>) => request<DeskTicketDetail>(`/tickets/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
   addNote: (id: string, message: string) => request<DeskTicketDetail>(`/tickets/${id}/internal-notes`, { method: "POST", body: JSON.stringify({ message }) }),
   options: () => request<DeskOptions>("/options"),
   config: () => request<{ publicBaseUrl: string }>("/config"),

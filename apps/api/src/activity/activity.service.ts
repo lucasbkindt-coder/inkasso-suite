@@ -102,6 +102,15 @@ const TITLES: Record<ActivityEventType, string> = {
   DESK_TICKET_PARTY_LINKED: "Partei mit Desk-Ticket verknüpft",
   DESK_TICKET_CASE_LINKED: "Inkassoakte mit Desk-Ticket verknüpft",
   DESK_TICKET_COMMENT_ADDED: "Interne Notiz hinzugefügt",
+  DESK_MAIL_INBOUND_IMPORTED: "E-Mail importiert",
+  DESK_MAIL_REVIEW_RESOLVED: "Mailprüfung abgeschlossen",
+  DESK_MAIL_DRAFT_CREATED: "E-Mail-Entwurf angelegt",
+  DESK_MAIL_DRAFT_UPDATED: "E-Mail-Entwurf bearbeitet",
+  DESK_MAIL_QUEUED: "E-Mail zum Versand vorgemerkt",
+  DESK_MAIL_SENT: "E-Mail versendet",
+  DESK_MAIL_FAILED: "E-Mail-Versand fehlgeschlagen",
+  DESK_MAIL_ATTACHMENT_IMPORTED: "E-Mail-Anhang importiert",
+  DESK_MAIL_READ: "E-Mail als gelesen markiert",
 };
 
 @Injectable()

@@ -1,7 +1,19 @@
 import { DeskTicketPriority, DeskTicketStatus } from "@prisma/client";
-import { IsEnum, IsOptional, IsString, IsUUID, MaxLength, MinLength } from "class-validator";
+import {
+  IsEnum,
+  IsInt,
+  IsOptional,
+  IsString,
+  IsUUID,
+  MaxLength,
+  Min,
+  MinLength,
+} from "class-validator";
 
 export class UpdateDeskTicketDto {
+  @IsInt()
+  @Min(1)
+  expectedVersion!: number;
   @IsOptional()
   @IsString()
   @MinLength(2)
