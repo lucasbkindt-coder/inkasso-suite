@@ -25,7 +25,7 @@ export class SecretEncryptionService {
         ]).toString("utf8"),
       ) as T;
     } catch {
-      throw new ServiceUnavailableException("Mail-Credentials konnten nicht entschlüsselt werden.");
+      throw new ServiceUnavailableException("Zugangsdaten konnten nicht entschlüsselt werden.");
     }
   }
 

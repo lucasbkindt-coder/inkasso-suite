@@ -2,6 +2,7 @@ import { ArrowLeft, Building2, CalendarDays, CircleDollarSign, User } from "luci
 import Link from "next/link";
 import { PortalPreviewButton } from "@/components/portal/portal-preview-button";
 import { CaseStatusControl } from "./case-status-control";
+import { DeskCallButton } from "@/components/desk/desk-call-button";
 
 import type { Case } from "@/types/case";
 
@@ -37,6 +38,7 @@ export function CaseHeader({ caseRecord, onChanged }: { caseRecord: Case; onChan
           <p className="mt-2 text-lg text-muted-foreground">{caseRecord.debtorParty.displayName}</p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <DeskCallButton caseId={caseRecord.id} number={caseRecord.debtorParty.contacts.find((contact) => ["PHONE", "MOBILE"].includes(contact.type))?.value} partyId={caseRecord.debtorParty.id} />
           <PortalPreviewButton id={caseRecord.id} kind="debtor-case" label="Schuldnerportal öffnen" />
           <Link className="rounded-lg border px-3 py-2 text-sm font-medium hover:bg-muted" href={`/parteien/${caseRecord.debtorParty.id}`}>
             Schuldner öffnen

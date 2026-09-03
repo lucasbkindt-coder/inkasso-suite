@@ -38,6 +38,16 @@ const ticketDetailInclude = {
       attachments: { orderBy: { createdAt: "asc" as const } },
       mailMessage: true,
       mailDraft: { select: { id: true, status: true } },
+      telephonyCall: {
+        select: {
+          id: true,
+          direction: true,
+          status: true,
+          remoteNumber: true,
+          durationSeconds: true,
+          disposition: true,
+        },
+      },
     },
     orderBy: [{ occurredAt: "asc" as const }, { id: "asc" as const }],
   },
@@ -306,7 +316,14 @@ export class DeskService {
     const tenantId = await this.tenant.getTenantId();
     const party = await this.prisma.party.findFirst({
       where: { id, tenantId, deletedAt: null, roles: { some: { role: { in: [PartyRoleType.CLIENT, PartyRoleType.DEBTOR] }, deletedAt: null } } },
-      select: { id: true, displayName: true, type: true, processingRestrictedAt: true, roles: { where: { deletedAt: null }, select: { role: true } } },
+      select: {
+        id: true,
+        displayName: true,
+        type: true,
+        processingRestrictedAt: true,
+        roles: { where: { deletedAt: null }, select: { role: true } },
+        contacts: { where: { deletedAt: null, type: { in: ["PHONE", "MOBILE"] } }, select: { id: true, type: true, value: true, label: true, isPrimary: true }, orderBy: { isPrimary: "desc" } },
+      },
     });
     if (!party) throw new NotFoundException("Partei wurde nicht gefunden.");
     return party;
@@ -316,7 +333,7 @@ export class DeskService {
     const tenantId = await this.tenant.getTenantId();
     const record = await this.prisma.case.findFirst({
       where: { id, tenantId, deletedAt: null },
-      select: { id: true, caseNumber: true, clientParty: { select: { id: true, displayName: true } }, debtorParty: { select: { id: true, displayName: true, processingRestrictedAt: true } } },
+      select: { id: true, caseNumber: true, clientParty: { select: { id: true, displayName: true } }, debtorParty: { select: { id: true, displayName: true, processingRestrictedAt: true, contacts: { where: { deletedAt: null, type: { in: ["PHONE", "MOBILE"] } }, select: { id: true, type: true, value: true, label: true, isPrimary: true }, orderBy: { isPrimary: "desc" } } } } },
     });
     if (!record) throw new NotFoundException("Inkassoakte wurde nicht gefunden.");
     return record;

@@ -119,6 +119,10 @@ const standardPermissions = [
   ["desk", "read", PermissionScope.TENANT, "Desk-Tickets anzeigen"],
   ["desk", "manage", PermissionScope.TENANT, "Desk-Tickets bearbeiten"],
   ["desk", "assign", PermissionScope.TENANT, "Desk-Tickets zuweisen"],
+  ["desk:telephony", "read", PermissionScope.TENANT, "Telefonie anzeigen"],
+  ["desk:telephony", "use", PermissionScope.TENANT, "Telefonie verwenden"],
+  ["desk:telephony", "manage", PermissionScope.TENANT, "Telefonie mandantenweit verwalten"],
+  ["desk:telephony", "manage-own", PermissionScope.TENANT, "Eigene Telefoniekonten verwalten"],
 ];
 
 const systemRoles = [
@@ -161,6 +165,9 @@ const systemRoles = [
       "credit-report:manage",
       "desk:read",
       "desk:manage",
+      "desk:telephony:read",
+      "desk:telephony:use",
+      "desk:telephony:manage-own",
     ],
   },
   {
@@ -195,6 +202,8 @@ const systemRoles = [
       "desk:read",
       "desk:manage",
       "desk:assign",
+      "desk:telephony:read",
+      "desk:telephony:use",
     ],
   },
   {

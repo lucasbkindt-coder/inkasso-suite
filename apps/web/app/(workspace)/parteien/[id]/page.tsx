@@ -16,6 +16,7 @@ import { AddressResearchPanel } from "@/components/address-research/address-rese
 import { CreditReportPanel } from "@/components/credit-reporting/credit-report-panel";
 import { ZohoPartyPanel } from "@/components/integrations/zoho-party-panel";
 import { DeskTicketPanel } from "@/components/desk/desk-ticket-panel";
+import { DeskCallButton } from "@/components/desk/desk-call-button";
 const API = "/api";
 type Party = {
   id: string;
@@ -110,6 +111,7 @@ export default function PartyDetailPage() {
           <Button onClick={() => setEditOpen(true)} variant="outline">
             <Pencil className="size-4" /> Bearbeiten
           </Button>
+          <DeskCallButton number={party.contacts.find((contact) => ["PHONE", "MOBILE"].includes(contact.type))?.value} partyId={party.id} />
           {party.roles.some((role) => role.role === "CLIENT") ? <PortalPreviewButton id={id} kind="client" label="Mandantenportal öffnen" /> : null}
           {party.roles.some((role) => role.role === "DEBTOR") ? <PortalPreviewButton id={id} kind="debtor" label="Schuldnerportal öffnen" /> : null}
         </div>

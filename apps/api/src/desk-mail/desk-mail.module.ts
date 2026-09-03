@@ -23,5 +23,6 @@ import { SecretEncryptionService } from "./secret-encryption.service";
     MailIngestionService,
     MailWorkflowService,
   ],
+  exports: [SecretEncryptionService],
 })
 export class DeskMailModule {}

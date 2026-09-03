@@ -111,6 +111,20 @@ const TITLES: Record<ActivityEventType, string> = {
   DESK_MAIL_FAILED: "E-Mail-Versand fehlgeschlagen",
   DESK_MAIL_ATTACHMENT_IMPORTED: "E-Mail-Anhang importiert",
   DESK_MAIL_READ: "E-Mail als gelesen markiert",
+  TELEPHONY_CONFIG_CHANGED: "Telefoniekonfiguration geändert",
+  TELEPHONY_ACCOUNT_CHANGED: "Telefoniekonto geändert",
+  TELEPHONY_CALL_STARTED: "Telefonat gestartet",
+  TELEPHONY_CALL_RINGING: "Telefonat klingelt",
+  TELEPHONY_CALL_ANSWERED: "Telefonat angenommen",
+  TELEPHONY_CALL_HELD: "Telefonat gehalten",
+  TELEPHONY_CALL_RESUMED: "Telefonat fortgesetzt",
+  TELEPHONY_CALL_ENDED: "Telefonat beendet",
+  TELEPHONY_CALL_FAILED: "Telefonat fehlgeschlagen",
+  TELEPHONY_CALL_MATCHED: "Telefonat zugeordnet",
+  TELEPHONY_CALL_REASSIGNED: "Telefonat neu zugeordnet",
+  TELEPHONY_CALL_DISPOSITION_SET: "Gesprächsergebnis dokumentiert",
+  TELEPHONY_CALLBACK_TASK_CREATED: "Rückruf-Aufgabe angelegt",
+  TELEPHONY_PRESENCE_CHANGED: "Telefonstatus geändert",
 };
 
 @Injectable()

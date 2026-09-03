@@ -38,6 +38,7 @@ export type DeskTicketDetail = DeskTicket & {
     attachments: { id: string; originalFileName: string; mimeType: string; size: number }[];
     mailMessage: { id: string; direction: "INBOUND" | "OUTBOUND"; fromAddress: string; toAddresses: string[]; ccAddresses: string[]; deliveryStatus: "PENDING" | "SENT" | "DELIVERED" | "BOUNCED" | "FAILED"; sentAt: string | null; receivedAt: string | null; sanitizedHtml: string | null } | null;
     mailDraft: { id: string; status: "DRAFT" | "QUEUED" | "SENT" | "CANCELLED" } | null;
+    telephonyCall: { id: string; direction: "INBOUND" | "OUTBOUND"; status: string; remoteNumber: string; durationSeconds: number | null; disposition: string | null } | null;
   }[];
   openTasks: { id: string; title: string; status: string; priority: string; dueAt: string | null }[];
 };
@@ -46,8 +47,9 @@ export type DeskDashboard = { mine: number; unassigned: number; open: number; wa
 export type DeskOptions = { memberships: { id: string; name: string }[]; teams: { id: string; name: string }[] };
 export type DeskPartyOption = { id: string; displayName: string; type: "PERSON" | "COMPANY"; roles: { role: "CLIENT" | "DEBTOR" | "CONTACT" | "OTHER" }[] };
 export type DeskCaseOption = { id: string; caseNumber: string; clientParty: { id: string; displayName: string }; debtorParty: { id: string; displayName: string } };
-export type DeskPartyContext = DeskPartyOption & { processingRestrictedAt: string | null };
-export type DeskCaseContext = DeskCaseOption & { debtorParty: DeskCaseOption["debtorParty"] & { processingRestrictedAt: string | null } };
+export type DeskPhoneContact = { id: string; type: "PHONE" | "MOBILE"; value: string; label: string | null; isPrimary: boolean };
+export type DeskPartyContext = DeskPartyOption & { processingRestrictedAt: string | null; contacts: DeskPhoneContact[] };
+export type DeskCaseContext = DeskCaseOption & { debtorParty: DeskCaseOption["debtorParty"] & { processingRestrictedAt: string | null; contacts: DeskPhoneContact[] } };
 export type DeskTicketList = { items: DeskTicket[]; page: number; pageSize: number; total: number; totalPages: number };
 
 type ApiError = { message?: string | string[] };

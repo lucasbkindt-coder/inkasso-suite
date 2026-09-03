@@ -496,6 +496,83 @@ enum EmailContactPreference {
   UNKNOWN
 }
 
+enum TelephonyProviderType {
+  DIRECT_WEBRTC
+  GATEWAY_REQUIRED
+  MOCK
+}
+
+enum TelephonyProviderStatus {
+  NOT_CONFIGURED
+  ACTIVE
+  DISABLED
+  ERROR
+}
+
+enum TelephonyRegistrationStatus {
+  NOT_CONFIGURED
+  DISCONNECTED
+  REGISTERING
+  REGISTERED
+  ERROR
+}
+
+enum TelephonyTransport {
+  UDP
+  TCP
+  TLS
+  WSS
+}
+
+enum CallDirection {
+  INBOUND
+  OUTBOUND
+}
+
+enum CallStatus {
+  CREATED
+  RINGING
+  ANSWERED
+  HELD
+  ENDED
+  MISSED
+  FAILED
+  CANCELLED
+}
+
+enum CallDisposition {
+  REACHED
+  NOT_REACHED
+  BUSY
+  NO_ANSWER
+  CALLBACK_REQUESTED
+  PAYMENT_PROMISE
+  INSTALLMENT_REQUEST
+  DISPUTE
+  WRONG_NUMBER
+  OTHER
+}
+
+enum CallerMatchStatus {
+  MATCHED
+  REVIEW_REQUIRED
+  UNMATCHED
+}
+
+enum AgentPresenceStatus {
+  OFFLINE
+  AVAILABLE
+  BUSY
+  WRAP_UP
+  DO_NOT_DISTURB
+}
+
+enum PhoneContactPreferenceValue {
+  PHONE_ALLOWED
+  PHONE_BLOCKED
+  UNKNOWN
+}
+
 enum InstallmentRequestStatus {
   SUBMITTED
   UNDER_REVIEW
@@ -632,6 +709,20 @@ enum ActivityEventType {
   DESK_MAIL_FAILED
   DESK_MAIL_ATTACHMENT_IMPORTED
   DESK_MAIL_READ
+  TELEPHONY_CONFIG_CHANGED
+  TELEPHONY_ACCOUNT_CHANGED
+  TELEPHONY_CALL_STARTED
+  TELEPHONY_CALL_RINGING
+  TELEPHONY_CALL_ANSWERED
+  TELEPHONY_CALL_HELD
+  TELEPHONY_CALL_RESUMED
+  TELEPHONY_CALL_ENDED
+  TELEPHONY_CALL_FAILED
+  TELEPHONY_CALL_MATCHED
+  TELEPHONY_CALL_REASSIGNED
+  TELEPHONY_CALL_DISPOSITION_SET
+  TELEPHONY_CALLBACK_TASK_CREATED
+  TELEPHONY_PRESENCE_CHANGED
 }
 
 enum CommunicationDirection {
@@ -811,6 +902,11 @@ model Tenant {
   deskMailSettings         DeskMailSettings?
   deskMailUserSignatures   DeskMailUserSignature[]
   mailContactPreferences   MailContactPreference[]
+  telephonyProviderConfigs TelephonyProviderConfig[]
+  staffTelephonyAccounts   StaffTelephonyAccount[]
+  telephonyCalls           TelephonyCall[]
+  agentPresences           AgentPresence[]
+  phoneContactPreferences  PhoneContactPreference[]
 
   @@index([deletedAt])
 }
@@ -859,6 +955,7 @@ model Case {
   externalIntegrationLinks ExternalIntegrationLink[]
   deskTickets              DeskTicket[]
   mailReviewItems          MailReviewItem[]
+  telephonyCalls           TelephonyCall[]
 
   @@unique([tenantId, caseNumber])
   @@unique([tenantId, sequenceYear, sequenceNumber])
@@ -1363,6 +1460,8 @@ model Party {
   deskTickets                 DeskTicket[]
   mailReviewItems             MailReviewItem[]          @relation("MailReviewSuggestedParty")
   mailContactPreferences      MailContactPreference[]
+  telephonyCalls              TelephonyCall[]
+  phoneContactPreferences     PhoneContactPreference[]
 
   @@index([tenantId, deletedAt, displayName])
   @@index([tenantId, type, deletedAt])
@@ -1497,12 +1596,13 @@ model ClientContact {
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
 
-  tenant                 Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-  party                  Party                   @relation(fields: [partyId], references: [id], onDelete: Restrict)
-  createdByMembership    TenantMembership?       @relation("ClientContactCreatedBy", fields: [createdByMembershipId], references: [id], onDelete: Restrict)
-  portalAccount          PortalAccount?
-  dataSubjectRequests    DataSubjectRequest[]
-  mailContactPreferences MailContactPreference[]
+  tenant                  Tenant                   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  party                   Party                    @relation(fields: [partyId], references: [id], onDelete: Restrict)
+  createdByMembership     TenantMembership?        @relation("ClientContactCreatedBy", fields: [createdByMembershipId], references: [id], onDelete: Restrict)
+  portalAccount           PortalAccount?
+  dataSubjectRequests     DataSubjectRequest[]
+  mailContactPreferences  MailContactPreference[]
+  phoneContactPreferences PhoneContactPreference[]
 
   @@index([tenantId, partyId, isActive, isPrimary])
   @@index([partyId, isActive])
@@ -1672,6 +1772,7 @@ model CommunicationEvent {
   externalIntegrationLinks ExternalIntegrationLink[]
   mailMessage              MailMessage?
   mailDraft                MailDraft?
+  telephonyCall            TelephonyCall?
 
   @@index([tenantId, partyId, occurredAt])
   @@index([tenantId, caseId, occurredAt])
@@ -1936,8 +2037,9 @@ model Contact {
   updatedAt DateTime    @updatedAt
   deletedAt DateTime?
 
-  party                  Party                   @relation(fields: [partyId], references: [id], onDelete: Restrict)
-  mailContactPreferences MailContactPreference[]
+  party                   Party                    @relation(fields: [partyId], references: [id], onDelete: Restrict)
+  mailContactPreferences  MailContactPreference[]
+  phoneContactPreferences PhoneContactPreference[]
 
   @@index([partyId, deletedAt, isPrimary])
   @@index([partyId, type, deletedAt])
@@ -2018,6 +2120,9 @@ model TenantMembership {
   createdMailDrafts                   MailDraft[]               @relation("MailDraftCreatedBy")
   updatedMailDrafts                   MailDraft[]               @relation("MailDraftUpdatedBy")
   deskMailUserSignature               DeskMailUserSignature?
+  staffTelephonyAccounts              StaffTelephonyAccount[]
+  agentPresence                       AgentPresence?
+  telephonyCalls                      TelephonyCall[]           @relation("TelephonyCallAgent")
 
   @@unique([tenantId, userId])
   @@index([userId, deletedAt])
@@ -2095,6 +2200,7 @@ model DeskTicket {
   activityEvents      ActivityEvent[]
   mailDrafts          MailDraft[]
   mailReviewItems     MailReviewItem[]
+  telephonyCalls      TelephonyCall[]
 
   @@unique([tenantId, number])
   @@unique([tenantId, sequenceYear, sequenceNumber])
@@ -2325,6 +2431,165 @@ model MailContactPreference {
   reason          String?                @db.VarChar(500)
   createdAt       DateTime               @default(now())
   updatedAt       DateTime               @updatedAt
+
+  tenant        Tenant         @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  party         Party?         @relation(fields: [partyId], references: [id], onDelete: Restrict)
+  contact       Contact?       @relation(fields: [contactId], references: [id], onDelete: Restrict)
+  clientContact ClientContact? @relation(fields: [clientContactId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId, partyId])
+  @@index([tenantId, contactId])
+  @@index([tenantId, clientContactId])
+}
+
+model TelephonyProviderConfig {
+  id                  String                  @id @default(uuid()) @db.Uuid
+  tenantId            String                  @db.Uuid
+  name                String                  @db.VarChar(150)
+  providerType        TelephonyProviderType
+  status              TelephonyProviderStatus @default(NOT_CONFIGURED)
+  defaultRegistrar    String?                 @db.VarChar(500)
+  defaultProxy        String?                 @db.VarChar(500)
+  defaultDomain       String?                 @db.VarChar(255)
+  defaultPort         Int?
+  defaultTransport    TelephonyTransport?
+  defaultWebSocketUrl String?                 @db.VarChar(1000)
+  defaultStun         String?                 @db.VarChar(1000)
+  defaultTurn         String?                 @db.VarChar(1000)
+  createdAt           DateTime                @default(now())
+  updatedAt           DateTime                @updatedAt
+
+  tenant        Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  staffAccounts StaffTelephonyAccount[]
+  calls         TelephonyCall[]
+
+  @@unique([tenantId, name])
+  @@index([tenantId, status, providerType])
+}
+
+model StaffTelephonyAccount {
+  id                           String                      @id @default(uuid()) @db.Uuid
+  tenantId                     String                      @db.Uuid
+  membershipId                 String                      @db.Uuid
+  telephonyProviderConfigId    String                      @db.Uuid
+  name                         String                      @db.VarChar(150)
+  enabled                      Boolean                     @default(true)
+  isDefault                    Boolean                     @default(false)
+  extension                    String?                     @db.VarChar(50)
+  authUsername                 String?                     @db.VarChar(255)
+  displayNumber                String?                     @db.VarChar(100)
+  outboundCallerId             String?                     @db.VarChar(100)
+  registrarOverride            String?                     @db.VarChar(500)
+  proxyOverride                String?                     @db.VarChar(500)
+  domainOverride               String?                     @db.VarChar(255)
+  portOverride                 Int?
+  transportOverride            TelephonyTransport?
+  webSocketUrlOverride         String?                     @db.VarChar(1000)
+  maxConcurrentCalls           Int?
+  registrationStatus           TelephonyRegistrationStatus @default(NOT_CONFIGURED)
+  lastRegistrationAt           DateTime?
+  lastRegistrationError        String?                     @db.VarChar(500)
+  registrationSessionId        String?                     @db.VarChar(128)
+  registrationSessionExpiresAt DateTime?
+  createdAt                    DateTime                    @default(now())
+  updatedAt                    DateTime                    @updatedAt
+
+  tenant         Tenant                    @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  membership     TenantMembership          @relation(fields: [membershipId], references: [id], onDelete: Restrict)
+  providerConfig TelephonyProviderConfig   @relation(fields: [telephonyProviderConfigId], references: [id], onDelete: Restrict)
+  credential     StaffTelephonyCredential?
+  calls          TelephonyCall[]
+
+  @@unique([tenantId, membershipId, name])
+  @@index([tenantId, membershipId, enabled, isDefault])
+  @@index([telephonyProviderConfigId])
+  @@index([registrationSessionExpiresAt])
+}
+
+model StaffTelephonyCredential {
+  id                      String   @id @default(uuid()) @db.Uuid
+  staffTelephonyAccountId String   @unique @db.Uuid
+  encryptedPayload        String   @db.Text
+  encryptionVersion       Int      @default(1)
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+
+  account StaffTelephonyAccount @relation(fields: [staffTelephonyAccountId], references: [id], onDelete: Restrict)
+}
+
+model TelephonyCall {
+  id                      String            @id @default(uuid()) @db.Uuid
+  tenantId                String            @db.Uuid
+  providerConfigId        String            @db.Uuid
+  staffTelephonyAccountId String?           @db.Uuid
+  direction               CallDirection
+  status                  CallStatus        @default(CREATED)
+  matchStatus             CallerMatchStatus @default(UNMATCHED)
+  partyId                 String?           @db.Uuid
+  caseId                  String?           @db.Uuid
+  ticketId                String?           @db.Uuid
+  agentMembershipId       String?           @db.Uuid
+  communicationEventId    String?           @unique @db.Uuid
+  remoteNumber            String            @db.VarChar(100)
+  normalizedRemoteNumber  String            @db.VarChar(32)
+  localNumber             String?           @db.VarChar(100)
+  startedAt               DateTime          @default(now())
+  ringingAt               DateTime?
+  answeredAt              DateTime?
+  endedAt                 DateTime?
+  durationSeconds         Int?
+  providerCallId          String?           @db.VarChar(255)
+  disposition             CallDisposition?
+  wrapUpNote              String?           @db.VarChar(2000)
+  matchCandidateCount     Int               @default(0)
+  createdAt               DateTime          @default(now())
+  updatedAt               DateTime          @updatedAt
+
+  tenant                Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  providerConfig        TelephonyProviderConfig @relation(fields: [providerConfigId], references: [id], onDelete: Restrict)
+  staffTelephonyAccount StaffTelephonyAccount?  @relation(fields: [staffTelephonyAccountId], references: [id], onDelete: Restrict)
+  party                 Party?                  @relation(fields: [partyId], references: [id], onDelete: Restrict)
+  case                  Case?                   @relation(fields: [caseId], references: [id], onDelete: Restrict)
+  ticket                DeskTicket?             @relation(fields: [ticketId], references: [id], onDelete: Restrict)
+  agentMembership       TenantMembership?       @relation("TelephonyCallAgent", fields: [agentMembershipId], references: [id], onDelete: Restrict)
+  communicationEvent    CommunicationEvent?     @relation(fields: [communicationEventId], references: [id], onDelete: Restrict)
+
+  @@unique([tenantId, providerConfigId, providerCallId])
+  @@index([tenantId, startedAt])
+  @@index([tenantId, status, startedAt])
+  @@index([tenantId, matchStatus, startedAt])
+  @@index([tenantId, normalizedRemoteNumber])
+  @@index([partyId, startedAt])
+  @@index([caseId, startedAt])
+  @@index([ticketId, startedAt])
+  @@index([agentMembershipId, startedAt])
+  @@index([staffTelephonyAccountId, startedAt])
+}
+
+model AgentPresence {
+  id           String              @id @default(uuid()) @db.Uuid
+  tenantId     String              @db.Uuid
+  membershipId String              @unique @db.Uuid
+  status       AgentPresenceStatus @default(OFFLINE)
+  updatedAt    DateTime            @updatedAt
+  createdAt    DateTime            @default(now())
+
+  tenant     Tenant           @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  membership TenantMembership @relation(fields: [membershipId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId, status])
+}
+
+model PhoneContactPreference {
+  id              String                      @id @default(uuid()) @db.Uuid
+  tenantId        String                      @db.Uuid
+  partyId         String?                     @db.Uuid
+  contactId       String?                     @db.Uuid
+  clientContactId String?                     @db.Uuid
+  preference      PhoneContactPreferenceValue @default(UNKNOWN)
+  reason          String?                     @db.VarChar(500)
+  createdAt       DateTime                    @default(now())
+  updatedAt       DateTime                    @updatedAt
 
   tenant        Tenant         @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   party         Party?         @relation(fields: [partyId], references: [id], onDelete: Restrict)

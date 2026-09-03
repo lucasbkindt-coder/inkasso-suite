@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, Loader2, Paperclip, Send } from "lucide-react";
+import { ArrowLeft, Loader2, Paperclip, Phone, Send } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import * as React from "react";
@@ -27,6 +27,7 @@ import {
   type DeskTicketStatus,
 } from "@/lib/desk-api";
 import { deskMailApi } from "@/lib/desk-mail-api";
+import { telephonyApi } from "@/lib/telephony-api";
 import { MailReplyComposer } from "./mail-reply-composer";
 
 export function TicketDetailView() {
@@ -37,14 +38,22 @@ export function TicketDetailView() {
   const [note, setNote] = React.useState("");
   const [error, setError] = React.useState("");
   const [pending, setPending] = React.useState(false);
+  const [phone, setPhone] = React.useState<string | null>(null);
   const canManage = session?.permissions.includes("desk:manage") ?? false;
   const canAssign = session?.permissions.includes("desk:assign") ?? false;
+  const canCall = session?.permissions.includes("desk:telephony:use") ?? false;
   const load = React.useCallback(() => {
     setError("");
     return Promise.all([deskApi.ticket(id), deskApi.options()])
       .then(([value, selectable]) => {
         setTicket(value);
         setOptions(selectable);
+        if (value.partyId) {
+          void deskApi
+            .partyContext(value.partyId)
+            .then((context) => setPhone(context.contacts[0]?.value ?? null))
+            .catch(() => setPhone(null));
+        } else setPhone(null);
       })
       .catch((cause) =>
         setError(cause instanceof Error ? cause.message : "Ticket konnte nicht geladen werden."),
@@ -201,8 +210,11 @@ export function TicketDetailView() {
             <h2 className="text-lg font-semibold">Verlauf</h2>
             <div className="mt-5 space-y-4">
               {ticket.communications.map((item) => {
-                const label =
-                  item.direction === "INTERNAL"
+                const label = item.telephonyCall
+                  ? item.telephonyCall.direction === "INBOUND"
+                    ? "Eingehender Anruf"
+                    : "Ausgehender Anruf"
+                  : item.direction === "INTERNAL"
                     ? "Interne Notiz"
                     : item.direction === "INBOUND"
                       ? "Eingehende E-Mail"
@@ -328,6 +340,38 @@ export function TicketDetailView() {
             </label>
           </ContextCard>
           <ContextCard title="Fachlicher Kontext">
+            {canCall && phone ? (
+              <button
+                className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 text-sm font-medium text-white disabled:opacity-50"
+                disabled={pending || Boolean(ticket.party?.processingRestrictedAt)}
+                onClick={() => {
+                  setPending(true);
+                  setError("");
+                  void telephonyApi
+                    .outgoing({
+                      remoteNumber: phone,
+                      partyId: ticket.partyId ?? undefined,
+                      caseId: ticket.caseId ?? undefined,
+                      ticketId: ticket.id,
+                    })
+                    .then((call) =>
+                      window.open(`/calls/${call.id}`, "_blank", "noopener,noreferrer"),
+                    )
+                    .catch((cause) =>
+                      setError(
+                        cause instanceof Error
+                          ? cause.message
+                          : "Anruf konnte nicht gestartet werden.",
+                      ),
+                    )
+                    .finally(() => setPending(false));
+                }}
+                type="button"
+              >
+                <Phone className="size-4" />
+                {phone} anrufen
+              </button>
+            ) : null}
             <label className="grid gap-1.5 text-sm font-medium">
               Partei
               <PartyPicker
